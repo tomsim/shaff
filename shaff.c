@@ -338,10 +338,9 @@ int main(int argc, char **argv)
        if(ver==1)
        {
          if((o>>14)==1) isz += 6;
-         else if((o>>14)<=33) isz += 9;
-         else if((o>>14)<=97) isz += 11;
-         else if((o>>14)<=353) isz += 14;
-         else if((o>>14)<=1377) isz += 16;
+         else if((o>>14)<=65) isz += 10;
+         else if((o>>14)<=321) isz += 13;
+         else if((o>>14)<=1345) isz += 15;
          else isz += 18;
          k = m;
          o = -1;
@@ -556,10 +555,9 @@ int main(int argc, char **argv)
            }
            else
            {
-             if(o >= -1377) csz -= 2;
-             if(o >= -353) csz -= 2;
-             if(o >= -97) csz -= 3;
-             if(o >= -33) csz -= 2;
+             if(o >= -1345) csz -= 3;
+             if(o >= -321) csz -= 2;
+             if(o >= -65) csz -= 3;
            }
          }
          if(k > 195)

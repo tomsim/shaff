@@ -1,12 +1,21 @@
+SHAFF header:
+
+Bytes 0...5 - signature and version ("SHAFF0" or "SHAFF1")
+Bytes 6,7 - offset to 1st block of data (big-endian)
+Bytes 8,9 - number of 16K blocks (big-endian)
+Bytes 10,11 - length of the last block (less or equal to 16384)
+Then optional uncompressed data - for SNA format it is
+Bytes 12...14 "SNA" - signature to identify SNA header
+Bytes 15...41 - SNA 27-byte header itself
+
 SHAFF0 data format:
 
-XX - any byte other than #FF is data byte
-#FF #00 - one byte #FF
+XX - any byte other than #FF is a single data byte
+#FF #00 - single byte #FF
 #FF 0xxxxxxx size (distance -1...-127)
-#FF 10xxxxxx size (distance -128...-190, and -191 means last distance greater or equal to 191)
-#FF 11xxxxxx xxxxxxxx size* (distance up to -16383)
-
-* no size after:
+#FF 10xxxxxx size (distance -128...-191, but -191 means last distance longer or equal to -191)
+#FF 11xxxxxx xxxxxxxx size (distance up to -16383)
+special case without size:
 #FF #C0 #00 - end of block (instead of distance -16384)
 
 size is 1 or 2 bytes:
@@ -16,17 +25,17 @@ size is 1 or 2 bytes:
 
 SHAFF1 data format:
 
-0xxxxxxx (byte #00...#7F)
-10xxxxxxx (byte #80...#FF)
-1100xx size* (00 for last byte, 01 and 10 for two unequal last distances longer than -1, 11 for distance -1)
-1101xxxxx (distance from -2 to -33)
-11100xxxxxx (distance from -34 to -97)
-111010xxxxxxxx (distance from -98 to -353)
-111011xxxxxxxxxx (distance from -354 to -1377)
-1111xxxxxxxxxxxxxx  size* (distance up to -16383)
-
-* no size after:
-110000 - use last byte (no size required)
+0xxxxxxx - single byte #00...#7F
+10xxxxxxx - single byte #80...#FF
+110000 - repeat last single byte (no size after that)
+110001 size (repeat last distance longer than -1 and not equal to previous)
+110010 size (repeat previous last distance longer than -1)
+110011 size (distance -1)
+1101xxxxxx size (distance from -2 to -65)
+11100xxxxxxxx size (distance from -66 to -321)
+11101xxxxxxxxxx size (distance from -322 to -1345)
+1111xxxxxxxxxxxxxx size (distance up to -16383)
+special case without size:
 111100000000000000 - end of block (instead of distance -16384)
 
 size is a sequence of 2...26 bits:
@@ -42,4 +51,4 @@ size is a sequence of 2...26 bits:
 1111111110xxxxxxxxxx - for 1024...2047
 11111111110xxxxxxxxxxx - for 2048...4095
 111111111110xxxxxxxxxxxx - for 4096...8191
-1111111111110xxxxxxxxxxxxx - for 8192...16383 
+1111111111110xxxxxxxxxxxxx - for 8192...16383
