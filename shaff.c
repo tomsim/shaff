@@ -147,7 +147,7 @@ int right_ones(unsigned int u)
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
- int i,j,k,m,n,o,p,w,z,e,o1,o2,sz,asz,bsz,csz,fsz,gsz,isz,pt=0;
+ int i,j,k,m,n,o,p,w,z,e,o1,o2,o3,o4,o5,o6,o7,o8,o9,o10,sz,asz,bsz,csz,fsz,gsz,isz,pt=0;
  unsigned int l;
  char *po,fname[100];
 
@@ -257,7 +257,7 @@ int main(int argc, char **argv)
        cor_table[o++] = m;
      }
    }
-   o1 = o2 = 1;
+   o1 = o2 = o3 = o4 = o5 = o6 = o7 = o8 = o9 = o10 = -1;
    cur_ele = 0;
    while(1)
    {
@@ -526,14 +526,22 @@ int main(int argc, char **argv)
          o = elems[j].offset;
          k = elems[j].size;
          if(k==2) asz--;
-         if(o==o1 || o==o2 || o==1)
+         if(o==o1 || o==o2 || o3==o || o4==o || o5==o || o6==o || o7==o || o8==o || o9==o || o10==o || o==-1)
          {
-           if(o==o1) printf("special 0 (%i)\n",o);
-           if(o==o2) printf("special 1 (%i)\n",o);
-           if(o==-1) printf("special 2 (%i)\n",o);
+           if(o==-1) printf("special 0 (%i)\n",o);
+           else if(o==o1) printf("special 1 (%i)\n",o);
+           else if(o==o2) printf("special 2 (%i)\n",o);
+           else if(o==o3) printf("special 3 (%i)\n",o);
+           else if(o==o4) printf("special 4 (%i)\n",o);
+           else if(o==o5) printf("special 5 (%i)\n",o);
+           else if(o==o6) printf("special 6 (%i)\n",o);
+           else if(o==o7) printf("special 7 (%i)\n",o);
+           else if(o==o8) printf("special 8 (%i)\n",o);
+           else if(o==o9) printf("special 9 (%i)\n",o);
+           else if(o==o10) printf("special 10 (%i)\n",o);
            csz -= 4;
          }
-#if 0
+#if 1
          else if(o < -128)
          {
            if(k>3) asz++;
@@ -556,8 +564,18 @@ int main(int argc, char **argv)
            asz++;
          }
          csz += elems[j].sizebits;
-         o2 = o1;
-         o1 = o;
+         if(o!=-1 && o!=o1)
+         {
+           o10 = o9;
+           o9 = o8;
+           o8 = o7;
+           o6 = o5;
+           o5 = o4;
+           o4 = o3;
+           o3 = o2;
+           o2 = o1;
+           o1 = o;
+         }
        }
        else
        {
