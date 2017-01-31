@@ -16,12 +16,14 @@ size is 1 or 2 bytes:
 
 SHAFF1 data format:
 
-0 xxxxxxx (byte #00...#7F)
-10 xxxxxxx (byte #80...#FF)
-1100 xx size* (00 for last byte, 01 and 10 for two unequal last distances longer than -1, 11 for distance -1)
-1101 xxxxxx size (distance -2...-65)
-1110 xxxxxxxxx size (distance -67...-577)
-1111 xxxxxxxxxxxxxx size* (distance up to -16383)
+0xxxxxxx (byte #00...#7F)
+10xxxxxxx (byte #80...#FF)
+1100xx size* (00 for last byte, 01 and 10 for two unequal last distances longer than -1, 11 for distance -1)
+1101xxxxx (distance from -2 to -33)
+11100xxxxxx (distance from -34 to -97)
+111010xxxxxxxx (distance from -98 to -353)
+111011xxxxxxxxxx (distance from -354 to -1377)
+1111xxxxxxxxxxxxxx  size* (distance up to -16383)
 
 * no size after:
 110000 - use last byte (no size required)
