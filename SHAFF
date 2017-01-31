@@ -19,8 +19,8 @@ SHAFF1 data format:
 0 xxxxxxx (byte #00...#7F)
 10 xxxxxxx (byte #80...#FF)
 1100 xx size* (00 for last byte, 01 and 10 for two unequal last distances longer than -1, 11 for distance -1)
-1101 xxxx size (distance -2...-17)
-1110 xxxxxxxx size (distance -18...-273)
+1101 xxxxxx size (distance -2...-65)
+1110 xxxxxxxxx size (distance -67...-577)
 1111 xxxxxxxxxxxxxx size* (distance up to -16383)
 
 * no size after:

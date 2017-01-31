@@ -338,8 +338,8 @@ int main(int argc, char **argv)
        if(ver==1)
        {
          if((o>>14)==1) isz += 6;
-         else if((o>>14)<18) isz += 8;
-         else if((o>>14)<274) isz += 12;
+         else if((o>>14)<66) isz += 10;
+         else if((o>>14)<578) isz += 13;
          else isz += 18;
          k = m;
          o = -1;
@@ -360,7 +360,7 @@ int main(int argc, char **argv)
        {
          if(ver==1) asz = isz>>3;
 #ifdef DEBUG
-         printf("Sequence %i bytes (coded by %i bits) from #%4.4X is identical to offset %i/#%4.4X (estimation: %i)\n",
+         printf("Sequence %i bytes (coded by %i bits) from #%4.4X is identical to offset %i/#%4.4X (estimate: %i)\n",
            elems[cur_ele].size,elems[cur_ele].sizebits,elems[cur_ele].address,elems[cur_ele].offset,((int)elems[cur_ele].offset)&0xFFFF,asz);
 #endif
          if(++cur_ele>=MAXELE)
@@ -554,8 +554,8 @@ int main(int argc, char **argv)
            }
            else
            {
-             if(o >= -273) csz -= 6;
-             if(o >= -17) csz -= 4;
+             if(o >= -577) csz -= 5;
+             if(o >= -65) csz -= 3;
            }
          }
          if(k > 195)
