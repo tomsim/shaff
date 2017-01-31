@@ -501,6 +501,53 @@ int main(int argc, char **argv)
        }
      }
    }
+#if 1
+   while(1)
+   {
+    memset(cor_table,0,sizeof(unsigned long)*COR16K);
+    for(i=0;i<bsz-3;i++)
+    {
+     if(one_block[i]>=0 && one_block[i]<255)
+     {
+       if(one_block[i+1]>=0 && one_block[i+1]<255)
+       {
+         k = 0xFF0000|(one_block[i+1]<<8)|one_block[i];
+         j = k>>1;
+         if(k&1) cor_table[j]+=0x10000;
+         else cor_table[j]++;
+         if(one_block[i+2]>=0 && one_block[i+2]<255)
+         {
+            k = (one_block[i+2]<<16)|(k&0xFFFF);
+            j = k>>1;
+            if(k&1) cor_table[j]+=0x10000;
+            else cor_table[j]++;
+         }
+       }
+     }
+    }
+    j = k = 0;
+    for(i=0;i<COR16K;i++)
+    {
+     o = cor_table[i]&0xFFFF;
+     if(o>k){j=i<<1;k=2*o;if(((i>>16)&0xFF)==0xFF)k-=o;}
+     o = (cor_table[i]>>16)&0xFFFF;
+     if(o>k){j=(i<<1)+1;k=2*o;if(((i>>16)&0xFF)==0xFF)k-=o;}
+    }
+    if(k<4) break;
+    printf("Detected triade is #%2.2X #%2.2X #%2.2X - %i bytes saved\n",j&0xFF,(j>>8)&0xFF,(j>>16)&0xFF,k);
+    for(i=0;i<bsz-3;i++)
+    {
+     if(one_block[i]==(j&0xFF) && one_block[i+1]==((j>>8)&0xFF) && (((j>>16)&0xFF)==0xFF||one_block[i+2]==((j>>16)&0xFF)))
+     {
+        one_block[i] = 30000;
+        one_block[i+1] = -1;
+        if(j<0xFF0000) one_block[i+2] = -1;
+     }
+    }
+    asz -= k-4;
+   }
+   printf("Done with triades\n");
+#endif
    printf("Actual compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
    fsz += asz;
  }
