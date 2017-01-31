@@ -1,4 +1,4 @@
-/* shaff.c - simple LZ-like archiver (10/06/2013 - 10/20/2013)
+/* shaff.c - simple LZ-like archiver (10/06/2013 - 10/25/2013)
 
    Part of NedoPC SDK (software development kit for simple devices)
 
@@ -22,16 +22,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEBUG
 #define VERSION "1.0"
-#define COR16K 16384/32*16384
-#define MAXELE 10000
+#if 1
+#define DEBUG
+#endif
+#define COR16K ((16384/32)*16384)
+#define MAXELE 15000
 
 unsigned long cor_table[COR16K];
 short one_block[16384];
-struct one_ele { short address, offset, size, sizebits; } elems[MAXELE];
+struct one_ele { short address, offset, size, oldval; } elems[MAXELE];
 int cur_ele = 0;
 int ver = 1;
+int lim = 0;
+int f_decode = 0;
+int f_blocks = 0;
 int f_test = 0;
 int f_sna = 0;
 unsigned char sna_header[27];
@@ -147,7 +152,7 @@ int right_ones(unsigned long u)
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
- int i,j,k,m,n,o,p,w,z,e,b,d,dd,sz,asz,bsz,csz,fsz,gsz,isz,pt=0;
+ int i,j,k,m,n,o,p,w,z,e,b,d,dd,sz,asz,bsz,csz,fsz,gsz,pt=0;
  unsigned long l;
  char *po,fname[100];
 
@@ -156,10 +161,30 @@ int main(int argc, char **argv)
  {
    if(argc<2)
    {
-     printf("\nUsage:\n\tshaff [options] file.bin\n\n");
+     printf("\nUsage:\n\tshaff [options] filename\n\n");
+     printf("where options are\n");
+     printf("\t-v0 to force SHAFF0 file format\n");
+     printf("\t-v1 to force SHAFF1 file format (set by default in this version)\n");
+     printf("\t-d to decompress SHAFF0 or SHAFF1 compressed files\n");
+     printf("\t-b to save blocks as separate files without headers\n");
+     printf("\t-lN to limit minimal size of detected sequences (by default 2 for v1 and 4 for v0)\n");
+     printf("\n");
      return 0;
    }
-   strncpy(fname,argv[1],100);
+   for(i=1;i<argc;i++)
+   {
+     if(argv[i][0]=='-')
+     {
+       switch(argv[i][1])
+       {
+         case 'd': f_decode = 1; break;
+         case 'b': f_blocks = 1; break;
+         case 'v': ver = atoi(&argv[i][2]); break;
+         case 'l': lim = atoi(&argv[i][2]); break;
+       }
+     }
+     else strncpy(fname,argv[i],100);
+   }
    fname[99] = 0;
    if(!strcmp(fname,"test")) f_test = 1;
  }
@@ -174,7 +199,7 @@ int main(int argc, char **argv)
    for(i=0;i<20;i++){one_block[sz++]='d';one_block[sz++]='e';}
    for(i=0;i<10;i++) one_block[sz++]='0'+i;
    for(i=0;i<60;i++) one_block[sz++]='a';
-   for(i=0;i<6;i++){one_block[sz++]='d';one_block[sz++]='e';}
+   for(i=0;i<6;i++) {one_block[sz++]='d';one_block[sz++]='e';}
    for(i=0;i<30;i++) one_block[sz++]='f';
    f = fo = NULL;
  }
@@ -218,6 +243,17 @@ int main(int argc, char **argv)
      fsz += 30;
    }
  }
+ printf("Version to use: SHAFF%i\n",ver);
+ if(ver!=0 && ver!=1)
+ {
+   if(f!=NULL) fclose(f);
+   if(fo!=NULL) fclose(fo);
+   printf("ERROR: Invalid version number!\n");
+   return -10;
+ }
+ if(lim<=0 && ver==0) lim=4;
+ if(lim<=0 && ver==1) lim=2;
+ printf("Minimal size to detect: %i\n",lim);
  n = 0;
  while(pt < sz)
  {
@@ -238,8 +274,7 @@ int main(int argc, char **argv)
      }
    }
    else pt = sz;
-   asz = bsz = k;
-   isz = k<<3;
+   bsz = k;
    printf("Analysis...\n");
    for(k=1;k<bsz;k++)
    {
@@ -310,8 +345,7 @@ int main(int argc, char **argv)
          k = 0;
        }
      }
-     if(ver==0 && m<4) break;
-     if(ver==1 && m<2) break;
+     if(m<lim) break;
      p = m;
      if((o&16383)+m > bsz) m = bsz-(o&16383);
      e = (o&16383)+(o>>14);
@@ -320,57 +354,16 @@ int main(int argc, char **argv)
        elems[cur_ele].address = e;
        elems[cur_ele].offset = -(o>>14);
        elems[cur_ele].size = m;
-       k = asz;
-       asz -= m;
-       asz += 3;
-       z = isz;
-       isz -= m<<3;
-       if(ver==0)
-       {
-         elems[cur_ele].sizebits = 8;
-         if(m>=196)
-         {
-           elems[cur_ele].sizebits += 8;
-           asz++;
-         }
-         if((o>>14)>=191) asz++;
-       }
-       if(ver==1)
-       {
-         if((o>>14)==1) isz += 6;
-         else if((o>>14)<=65) isz += 10;
-         else if((o>>14)<=321) isz += 13;
-         else if((o>>14)<=1345) isz += 15;
-         else isz += 18;
-         k = m;
-         o = -1;
-         while(k){k>>=1;o++;}
-         isz += o+o;
-         elems[cur_ele].sizebits = o+o;
-       }
-       if((ver==0 && asz > k) || (ver==1 && isz > z))
-       {
-         if(ver==0) asz = k;
-         if(ver==1)
-         {
-           isz = z;
-           asz = isz>>3;
-         }
-       }
-       else
-       {
-         if(ver==1) asz = isz>>3;
+
 #ifdef DEBUG
-         printf("Sequence %i bytes (coded by %i bits) from #%4.4X is identical to offset %i/#%4.4X (estimate: %i)\n",
-           elems[cur_ele].size,elems[cur_ele].sizebits,elems[cur_ele].address,elems[cur_ele].offset,((int)elems[cur_ele].offset)&0xFFFF,asz);
+       printf("Matched address=#%4.4X size=%i offset=%i/#%4.4X\n",elems[cur_ele].address,elems[cur_ele].size,elems[cur_ele].offset,((int)elems[cur_ele].offset)&0xFFFF);
 #endif
-         if(++cur_ele>=MAXELE)
-         {
-           if(f!=NULL) fclose(f);
-           if(fo!=NULL) fclose(fo);
-           printf("ERROR: Too many elements...\n");
-           return -4;
-         }
+       if(++cur_ele>=MAXELE)
+       {
+         if(f!=NULL) fclose(f);
+         if(fo!=NULL) fclose(fo);
+         printf("ERROR: Too many elements...\n");
+         return -4;
        }
      }
      o = e;
@@ -495,19 +488,19 @@ int main(int argc, char **argv)
       }
      }
    }
-   printf("Number of detected sequences: %i\n",cur_ele);
-   printf("Estimated compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
+   printf("Number of matches: %i\n",cur_ele);
    for(i=0;i<cur_ele;i++)
    {
      j = elems[i].address;
      k = elems[i].size;
      e = 0;
      if(one_block[j]<0 || one_block[j]>255) e++;
+     elems[i].oldval = one_block[j];
      one_block[j++] = 1000 + i;
      while(--k)
      {
        if(one_block[j]<0 || one_block[j]>255) e++;
-       one_block[j++] = -1;
+       one_block[j++] -= 256;
      }
      if(e) printf("ERROR: %i collisions detected within range #%4.4X...#%4.4X\n",
         e,elems[i].address,elems[i].address+elems[i].size-1);
@@ -564,6 +557,13 @@ int main(int argc, char **argv)
          {
            asz++;
          }
+/*
+         k = m;
+         o = -1;
+         while(k){k>>=1;o++;}
+         isz += o+o;
+         elems[cur_ele].sizebits = o+o;
+*/
          csz += elems[j].sizebits;
          if(o!=dd&&o!=-1){dd=d;d=o;}
        }
