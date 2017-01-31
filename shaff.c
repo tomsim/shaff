@@ -1,4 +1,4 @@
-/* shaff.c - simple LZ-like archiver (10/06/2013 - 10/15/2013)
+/* shaff.c - simple LZ-like archiver (10/06/2013 - 10/20/2013)
 
    Part of NedoPC SDK (software development kit for simple devices)
 
@@ -147,7 +147,7 @@ int right_ones(unsigned long u)
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
- int i,j,k,m,n,o,p,w,z,e,o1,o2,sz,asz,bsz,csz,fsz,gsz,isz,pt=0;
+ int i,j,k,m,n,o,p,w,z,e,b,d,dd,sz,asz,bsz,csz,fsz,gsz,isz,pt=0;
  unsigned long l;
  char *po,fname[100];
 
@@ -257,7 +257,6 @@ int main(int argc, char **argv)
        cor_table[o++] = m;
      }
    }
-   o1 = o2 = 1;
    cur_ele = 0;
    while(1)
    {
@@ -326,7 +325,6 @@ int main(int argc, char **argv)
        asz += 3;
        z = isz;
        isz -= m<<3;
-       isz += 10;
        if(ver==0)
        {
          elems[cur_ele].sizebits = 8;
@@ -335,12 +333,14 @@ int main(int argc, char **argv)
            elems[cur_ele].sizebits += 8;
            asz++;
          }
-         if((o>>14)>=192) asz++;
+         if((o>>14)>=191) asz++;
        }
        if(ver==1)
        {
-         if((o>>14)==1) isz -= 4;
-         else if((o>>14)>=128) isz += 8;
+         if((o>>14)==1) isz += 6;
+         else if((o>>14)<18) isz += 8;
+         else if((o>>14)<274) isz += 12;
+         else isz += 18;
          k = m;
          o = -1;
          while(k){k>>=1;o++;}
@@ -512,8 +512,9 @@ int main(int argc, char **argv)
         e,elems[i].address,elems[i].address+elems[i].size-1);
    }
    asz = 3;
-   csz = 10;
-   o1 = o2 = -1;
+   csz = 18;
+   b = -1;
+   d = dd = 0;
    for(i=0;i<bsz;i++)
    {
      if(one_block[i]>=0)
@@ -521,43 +522,48 @@ int main(int argc, char **argv)
        if(one_block[i]>255)
        {
          asz += 3;
-         csz += 10;
+         csz += 18;
          j = one_block[i]-1000;
          o = elems[j].offset;
          k = elems[j].size;
-         if(k==2) asz--;
-         if(o==o1 || o==o2 || o==1)
+         if(k==2)
          {
-           if(o==-1) printf("special -1 (-1)\n");
-           if(o==o1) printf("special 0 (%i)\n",o);
-           if(o==o2) printf("special 1 (%i)\n",o);
-           csz -= 4;
+           asz--;
          }
-#if 0
-         else if(o < -128)
+         if(ver==0 && o < -190)
          {
            if(k>3) asz++;
-           csz += 8;
          }
-#else
-         else if(o < -128 && o >= -383)
+         if(ver==1)
          {
-           if(k>3) asz++;
-           csz += 4;
-         }
-         else if(o < -383)
-         {
-           if(k>3) asz++;
-           csz += 8;
-         }
+           if(o==d || o==dd || o==-1)
+           {
+             if(o==d)
+             {
+#ifdef DEBUG
+               printf("Use last distance %i/#%4.4X\n",o,o&0xFFFF);
 #endif
+             }
+             if(o==dd)
+             {
+#ifdef DEBUG
+               printf("Use previous last distance %i/#%4.4X\n",o,o&0xFFFF);
+#endif
+             }
+             csz -= 12;
+           }
+           else
+           {
+             if(o >= -273) csz -= 6;
+             if(o >= -17) csz -= 4;
+           }
+         }
          if(k > 195)
          {
            asz++;
          }
          csz += elems[j].sizebits;
-         o2 = o1;
-         o1 = o;
+         if(o!=dd&&o!=-1){dd=d;d=o;}
        }
        else
        {
@@ -566,14 +572,25 @@ int main(int argc, char **argv)
          {
            asz++;
          }
-         if(one_block[i]&0x80)
-              csz += 9;
-         else csz += 8;
+         if(one_block[i]==b)
+         {
+#ifdef DEBUG
+           printf("Use last byte #%2.2X\n",b);
+#endif
+           csz += 6;
+         }
+         else
+         {
+           if(one_block[i]&0x80)
+                csz += 9;
+           else csz += 8;
+         }
+         b = one_block[i];
        }
      }
    }
-   printf("Bytestream compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
-   printf("Bitstream compression: %i%% (%i -> %i)\n",(csz>>3)*100/bsz,bsz,(csz>>3)+1);
+   printf("Byte-stream compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
+   printf("Bit-stream compression: %i%% (%i -> %i)\n",(csz>>3)*100/bsz,bsz,(csz>>3)+1);
    fsz += asz;
    gsz += (csz>>3)+((csz&7)?1:0);
  }
@@ -583,8 +600,8 @@ int main(int argc, char **argv)
    fclose(fo);
  }
 
- printf("\nBytewise compressed file size (v0): %i bytes\n",fsz);
- printf("Bitwise compressed file size (v1): %i bytes\n",gsz);
+ printf("\nSHAFF0 compressed file size: %i bytes\n",fsz);
+ printf("SHAFF1 compressed file size: %i bytes\n",gsz);
  printf("Good bye!\n\n");
  return 0;
 }

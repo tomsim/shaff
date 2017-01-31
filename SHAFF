@@ -16,17 +16,18 @@ size is 1 or 2 bytes:
 
 SHAFF1 data format:
 
-0+7bits (byte #00...#7F)
-10+7bits (byte #80...#FF)
-110+4bits+size* (0 for last byte, 1 for -1, 2 for -2 etc., but 15 means last distance greater or equal to 15)
-1110+8bits+size (distance -15...-270)
-1111+14bits+size* (distance up to -16383)
+0 xxxxxxx (byte #00...#7F)
+10 xxxxxxx (byte #80...#FF)
+1100 xx size* (00 for last byte, 01 and 10 for two unequal last distances longer than -1, 11 for distance -1)
+1101 xxxx size (distance -2...-17)
+1110 xxxxxxxx size (distance -18...-273)
+1111 xxxxxxxxxxxxxx size* (distance up to -16383)
 
 * no size after:
-1100000 - use last byte (no size required)
+110000 - use last byte (no size required)
 111100000000000000 - end of block (instead of distance -16384)
 
-size is a sequence of 2 - 26 bits:
+size is a sequence of 2...26 bits:
 0x - for 2 and 3
 10xx - for 4, 5, 6, 7
 110xxx - for 8...15
@@ -39,4 +40,4 @@ size is a sequence of 2 - 26 bits:
 1111111110xxxxxxxxxx - for 1024...2047
 11111111110xxxxxxxxxxx - for 2048...4095
 111111111110xxxxxxxxxxxx - for 4096...8191
-1111111111110xxxxxxxxxxxxx - for 8192...16383
+1111111111110xxxxxxxxxxxxx - for 8192...16383 
