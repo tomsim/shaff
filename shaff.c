@@ -1,4 +1,4 @@
-/* shaff.c - simple LZ-like archiver (10/06/2013 - 10/10/2013)
+/* shaff.c - simple LZ-like archiver (10/06/2013 - 10/15/2013)
 
    Part of NedoPC SDK (software development kit for simple devices)
 
@@ -23,16 +23,15 @@
 #include <string.h>
 
 #define DEBUG
-#define HUFF257
 #define VERSION "1.0"
 #define COR16K 16384/32*16384
 #define MAXELE 10000
 
-int freq[256];
 unsigned long cor_table[COR16K];
 short one_block[16384];
-struct one_ele { short address, offset, size; } elems[MAXELE];
+struct one_ele { short address, offset, size, sizebits; } elems[MAXELE];
 int cur_ele = 0;
+int ver = 1;
 int f_test = 0;
 int f_sna = 0;
 unsigned char sna_header[27];
@@ -147,8 +146,8 @@ int right_ones(unsigned long u)
 
 int main(int argc, char **argv)
 {
- FILE *f;
- int i,j,k,m,n,o,p,w,e,sz,asz,bsz,fsz,pt=0;
+ FILE *f,*fo;
+ int i,j,k,m,n,o,p,w,z,e,sz,asz,bsz,csz,fsz,gsz,isz,pt=0;
  unsigned long l;
  char *po,fname[100];
 
@@ -157,14 +156,14 @@ int main(int argc, char **argv)
  {
    if(argc<2)
    {
-     printf("\nUsage:\n\tshaff file.bin [options]\n\n");
+     printf("\nUsage:\n\tshaff [options] file.bin\n\n");
      return 0;
    }
    strncpy(fname,argv[1],100);
    fname[99] = 0;
    if(!strcmp(fname,"test")) f_test = 1;
  }
- fsz = 12;
+ fsz = gsz = 12;
  if(f_test)
  {
    sz = 0;
@@ -177,6 +176,7 @@ int main(int argc, char **argv)
    for(i=0;i<60;i++) one_block[sz++]='a';
    for(i=0;i<6;i++){one_block[sz++]='d';one_block[sz++]='e';}
    for(i=0;i<30;i++) one_block[sz++]='f';
+   f = fo = NULL;
  }
  else
  {
@@ -192,11 +192,24 @@ int main(int argc, char **argv)
    sz = ftell(f);
    printf("Original file size: %i bytes (SNA=%c)\n",sz,f_sna?'Y':'N');
    fseek(f,0,SEEK_SET);
-   if(f_sna && sz!=49179)
+   if(f_sna)
    {
-     fclose(f);
-     printf("ERROR: Invalid SNA file '%s'\n",fname);
-     return -2;
+     if(sz!=49179)
+     {
+       if(f!=NULL) fclose(f);
+       printf("ERROR: Invalid SNA file '%s'\n",fname);
+       return -2;
+     }
+     po = strstr(fname,".SNA");
+     if(po!=NULL){po[1]='s';po[2]='n';po[3]='a';}
+   }
+   strcat(fname,"ff");
+   fo = fopen(fname,"wb");
+   if(fo==NULL)
+   {
+     if(f!=NULL) fclose(f);
+     printf("ERROR: Can't open file '%s' for writing\n",fname);
+     return -3;
    }
    if(f_sna)
    {
@@ -226,6 +239,7 @@ int main(int argc, char **argv)
    }
    else pt = sz;
    asz = bsz = k;
+   isz = k<<3;
    printf("Analysis...\n");
    for(k=1;k<bsz;k++)
    {
@@ -241,9 +255,6 @@ int main(int argc, char **argv)
             one_block[i+j]==one_block[i+j+k]) m |= 1;
        }
        cor_table[o++] = m;
-/*
-       if(m) printf("%8.8X=%8.8X\n",o-1,m);
-*/
      }
    }
    cur_ele = 0;
@@ -299,14 +310,11 @@ int main(int argc, char **argv)
          k = 0;
        }
      }
-
-     if(m<3) break;
+     if(ver==0 && m<4) break;
+     if(ver==1 && m<2) break;
      p = m;
      if((o&16383)+m > bsz) m = bsz-(o&16383);
      e = (o&16383)+(o>>14);
-/*
-     printf("o=%7.7X|%02d m=%i (was %i) w=%i bsz=%i (%i,%i)\n",o>>5,o&31,m,p,w,bsz,(o&16383)+p,e);
-*/
      if(e < bsz)
      {
        elems[cur_ele].address = e;
@@ -315,22 +323,52 @@ int main(int argc, char **argv)
        k = asz;
        asz -= m;
        asz += 3;
-       if(m>=128) asz++;
-       if((o>>14)>=196) asz++;
-       if(asz >= k)
+       z = isz;
+       isz -= m<<3;
+       isz += 10;
+       if(ver==0)
        {
-         asz = k;
+         elems[cur_ele].sizebits = 8;
+         if(m>=192)
+         {
+           elems[cur_ele].sizebits += 8;
+           asz++;
+         }
+       }
+       if(ver==1)
+       {
+         if((o>>14)>=196) isz += 8;
+         k = m;
+         o = -1;
+         while(k){k>>=1;o++;}
+         isz += o+o;
+         elems[cur_ele].sizebits = o+o;
+       }
+       if((ver==0 && asz > k) || (ver==1 && isz > z))
+       {
+         if(ver==0) asz = k;
+         if(ver==1)
+         {
+           isz = z;
+           asz = isz>>3;
+         }
        }
        else
        {
+         if(ver==1) asz = isz>>3;
 #ifdef DEBUG
-         printf("Sequence %i bytes from #%4.4X is identical to offset %i/#%4.4X (estimation: %i)\n",
-           elems[cur_ele].size,elems[cur_ele].address,elems[cur_ele].offset,((int)elems[cur_ele].offset)&0xFFFF,asz);
+         printf("Sequence %i bytes (coded by %i bits) from #%4.4X is identical to offset %i/#%4.4X (estimation: %i)\n",
+           elems[cur_ele].size,elems[cur_ele].sizebits,elems[cur_ele].address,elems[cur_ele].offset,((int)elems[cur_ele].offset)&0xFFFF,asz);
 #endif
-         cur_ele++;
+         if(++cur_ele>=MAXELE)
+         {
+           if(f!=NULL) fclose(f);
+           if(fo!=NULL) fclose(fo);
+           printf("ERROR: Too many elements...\n");
+           return -4;
+         }
        }
      }
-
      o = e;
      for(p=0;p<bsz;p++)
      {
@@ -348,18 +386,12 @@ int main(int argc, char **argv)
          l >>= 1;
          k--;
        }
-/*
-       if(p<3||p==256) printf("j=%8.8X w=%8.8X (o=%7.7X|%02d)\n",j,w,o>>5,o&31);
-*/
        cor_table[j] &= ~w;
       }
       else for(i=0;i<=((m+(o&31))>>5);i++)
       {
        if(k==0) break;
        j = ((p<<9)|((o>>5)&511))+i;
-/*
-       if(p>3||p==256) printf("j=%8.8X i=%i k=%i (o=%7.7X|%02d)\n",j,i,k,o>>5,o&31);
-*/
        if(i==0)
        {
          switch(o&31)
@@ -442,8 +474,10 @@ int main(int argc, char **argv)
        }
        if(j>=COR16K)
        {
+         if(f!=NULL) fclose(f);
+         if(fo!=NULL) fclose(fo);
          printf("ERROR: %i out of range (p=%i)\n",j,p);
-         return -3;
+         return -5;
        }
        cor_table[j] = 0;
        k -= 32;
@@ -456,13 +490,6 @@ int main(int argc, char **argv)
         else m--;
       }
      }
-/*
-     printf("cor_table after cleanup:\n");
-     for(i=0;i<COR16K;i++)
-     {
-        if(cor_table[i]) printf("%8.8X=%8.8X\n",i,cor_table[i]);
-     }
-*/
    }
    printf("Number of detected sequences: %i\n",cur_ele);
    printf("Estimated compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
@@ -478,105 +505,60 @@ int main(int argc, char **argv)
        if(one_block[j]<0 || one_block[j]>255) e++;
        one_block[j++] = -1;
      }
-     if(e) printf("ERROR: %i collisions detected at range #%4.4X...#%4.4X\n",
+     if(e) printf("ERROR: %i collisions detected within range #%4.4X...#%4.4X\n",
         e,elems[i].address,elems[i].address+elems[i].size-1);
    }
    asz = 3;
+   csz = 10;
    for(i=0;i<bsz;i++)
    {
      if(one_block[i]>=0)
      {
        if(one_block[i]>255)
        {
-         asz+=3;
+         asz += 3;
+         csz += 10;
          j = one_block[i]-1000;
          o = elems[j].offset;
          k = elems[j].size;
-         if(o < -127) asz++;
-         if(k > 195) asz++;
+         if(k==2) asz--;
+         if(o < -191)
+         {
+           if(k>3) asz++;
+           csz += 8;
+         }
+         if(k > 195)
+         {
+           if(k>3) asz++;
+           csz += elems[j].sizebits;
+         }
        }
        else
        {
-         if(one_block[i]==255) asz++;
          asz++;
-       }
-     }
-   }
-#if 0
-   while(1)
-   {
-    memset(cor_table,0,sizeof(unsigned long)*COR16K);
-    for(i=0;i<bsz-3;i++)
-    {
-     if(one_block[i]>=0 && one_block[i]<255)
-     {
-       if(one_block[i+1]>=0 && one_block[i+1]<255)
-       {
-         k = 0xFF0000|(one_block[i+1]<<8)|one_block[i];
-         j = k>>1;
-         if(k&1) cor_table[j]+=0x10000;
-         else cor_table[j]++;
-         if(one_block[i+2]>=0 && one_block[i+2]<255)
+         if(one_block[i]==255)
          {
-            k = (one_block[i+2]<<16)|(k&0xFFFF);
-            j = k>>1;
-            if(k&1) cor_table[j]+=0x10000;
-            else cor_table[j]++;
+           asz++;
          }
+         if(one_block[i]&0x80)
+              csz += 9;
+         else csz += 8;
        }
      }
-    }
-    j = k = 0;
-    for(i=0;i<COR16K;i++)
-    {
-     o = cor_table[i]&0xFFFF;
-     if(o>k){j=i<<1;k=2*o;if(((i>>16)&0xFF)==0xFF)k-=o;}
-     o = (cor_table[i]>>16)&0xFFFF;
-     if(o>k){j=(i<<1)+1;k=2*o;if(((i>>16)&0xFF)==0xFF)k-=o;}
-    }
-    if(k<4) break;
-    printf("Detected triade is #%2.2X #%2.2X #%2.2X - %i bytes saved\n",j&0xFF,(j>>8)&0xFF,(j>>16)&0xFF,k);
-    for(i=0;i<bsz-3;i++)
-    {
-     if(one_block[i]==(j&0xFF) && one_block[i+1]==((j>>8)&0xFF) && (((j>>16)&0xFF)==0xFF||one_block[i+2]==((j>>16)&0xFF)))
-     {
-        one_block[i] = 30000;
-        one_block[i+1] = -1;
-        if(j<0xFF0000) one_block[i+2] = -1;
-     }
-    }
-    asz -= k-4;
    }
-   printf("Done with triades\n");
-#endif
-#if 1
-   k = 0;
-   for(i=0;i<8;i++) freq[i]=0;
-   for(i=0;i<bsz;i++)
-   {
-     if(one_block[i]>255)
-     {
-       j = one_block[i]-1000;
-       if(elems[j].offset==k) freq[0]++;
-       if(elems[j].offset==k+1) freq[1]++;
-       if(elems[j].offset==k+2) freq[2]++;
-       if(elems[j].offset==k+3) freq[3]++;
-       if(elems[j].offset==k && elems[j].size<=10) freq[4]++;
-       if(elems[j].offset==k-3) freq[5]++;
-       if(elems[j].offset==k-2) freq[6]++;
-       if(elems[j].offset==k-1) freq[7]++;
-       k = elems[j].offset;
-     }
-   }
-   for(i=0;i<8;i++) printf("freq[%i]=%i\n",i,freq[i]);
-#endif
-   printf("Actual compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
+   printf("Bytestream compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
+   printf("Bitstream compression: %i%% (%i -> %i)\n",(csz>>3)*100/bsz,bsz,(csz>>3)+1);
    fsz += asz;
+   gsz += (csz>>3)+((csz&7)?1:0);
  }
- if(!f_test) fclose(f);
+ if(!f_test)
+ {
+   fclose(f);
+   fclose(fo);
+ }
 
- printf("\nCompressed file size: %i bytes\n",fsz);
-
- printf("\nGood bye!\n\n");
+ printf("\nBytewise compressed file size (v0): %i bytes\n",fsz);
+ printf("Bitwise compressed file size (v1): %i bytes\n",gsz);
+ printf("Good bye!\n\n");
  return 0;
 }
