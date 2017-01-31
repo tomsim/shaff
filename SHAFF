@@ -1,0 +1,42 @@
+SHAFF0 data format:
+
+XX - any byte other than #FF is data byte
+#FF #00 - one byte #FF
+#FF 0xxxxxxx size (distance -1...-127)
+#FF 10xxxxxx size (distance -128...-190, and -191 means last distance greater or equal to 191)
+#FF 11xxxxxx xxxxxxxx size* (distance up to -16383)
+
+* no size after:
+#FF #C0 #00 - end of block (instead of distance -16384)
+
+size is 1 or 2 bytes:
+1xxxxxxx - for 4...131
+01xxxxxx - for 132..195
+00xxxxxx xxxxxxxx - for up to 16383
+
+SHAFF1 data format:
+
+0+7bits (byte #00...#7F)
+10+7bits (byte #80...#FF)
+110+4bits+size* (0 for last byte, 1 for -1, 2 for -2 etc., but 15 means last distance greater or equal to 15)
+1110+8bits+size (distance -15...-270)
+1111+14bits+size* (distance up to -16383)
+
+* no size after:
+1100000 - use last byte (no size required)
+111100000000000000 - end of block (instead of distance -16384)
+
+size is a sequence of 2 - 26 bits:
+0x - for 2 and 3
+10xx - for 4, 5, 6, 7
+110xxx - for 8...15
+1110xxxx - for 16...31
+11110xxxxx - for 32...63
+111110xxxxxx - for 64...127
+1111110xxxxxxx - for 128...254
+11111110xxxxxxxx - for 255...511
+111111110xxxxxxxxx - for 512...1023
+1111111110xxxxxxxxxx - for 1024...2047
+11111111110xxxxxxxxxxx - for 2048...4095
+111111111110xxxxxxxxxxxx - for 4096...8191
+1111111111110xxxxxxxxxxxxx - for 8192...16383
