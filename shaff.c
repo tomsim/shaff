@@ -30,7 +30,6 @@
 
 unsigned long cor_table[COR16K];
 short one_block[16384];
-int freq[257];
 struct one_ele { short address, offset, size; } elems[MAXELE];
 int cur_ele = 0;
 int f_test = 0;
@@ -148,7 +147,7 @@ int right_ones(unsigned long u)
 int main(int argc, char **argv)
 {
  FILE *f;
- int i,j,k,m,n,o,p,w,e,sz,asz,bsz,pt=0;
+ int i,j,k,m,n,o,p,w,e,sz,asz,bsz,fsz,pt=0;
  unsigned long l;
  char *po,fname[100];
 
@@ -164,7 +163,7 @@ int main(int argc, char **argv)
    fname[99] = 0;
    if(!strcmp(fname,"test")) f_test = 1;
  }
- for(i=0;i<257;i++) freq[i]=0;
+ fsz = 12;
  if(f_test)
  {
    sz = 0;
@@ -180,6 +179,7 @@ int main(int argc, char **argv)
  }
  else
  {
+   printf("\nOpening file '%s'\n",fname);
    f = fopen(fname,"rb");
    if(f==NULL)
    {
@@ -189,6 +189,7 @@ int main(int argc, char **argv)
    if(strstr(fname,".sna")!=NULL || strstr(fname,".SNA")!=NULL) f_sna = 1;
    fseek(f,0,SEEK_END);
    sz = ftell(f);
+   printf("Original file size: %i bytes (SNA=%c)\n",sz,f_sna?'Y':'N');
    fseek(f,0,SEEK_SET);
    if(f_sna && sz!=49179)
    {
@@ -200,30 +201,8 @@ int main(int argc, char **argv)
    {
      fread(sna_header,1,27,f);
      pt = 27;
+     fsz += 30;
    }
-#if 0
-   k = 0;
-   for(i=0;i<sz;i++)
-   {
-     j = fgetc(f);
-     freq[j]++;
-     if(freq[j]>k) k=freq[j];
-   }
-   j = -1;
-   for(i=0;i<256;i++)
-   {
-     printf("[0x%2.2X]=%i ",i,freq[i]);
-     if(freq[i]<k)
-     {
-       k = freq[i];
-       j = i;
-       printf("Next candidate!\n");
-     }
-     else printf("\n");
-   }
-   printf("Less frequent byte is 0x%2.2X (%i times)\n",j,k);
-   fseek(f,pt,SEEK_SET);
-#endif
  }
  n = 0;
  while(pt < sz)
@@ -261,9 +240,9 @@ int main(int argc, char **argv)
             one_block[i+j]==one_block[i+j+k]) m |= 1;
        }
        cor_table[o++] = m;
-#if 0
+/*
        if(m) printf("%8.8X=%8.8X\n",o-1,m);
-#endif
+*/
      }
    }
    cur_ele = 0;
@@ -320,13 +299,13 @@ int main(int argc, char **argv)
        }
      }
 
-     if(m<3) break; /* m<=3 */
+     if(m<=3) break;
      p = m;
      if((o&16383)+m > bsz) m = bsz-(o&16383);
      e = (o&16383)+(o>>14);
-#if 0
+/*
      printf("o=%7.7X|%02d m=%i (was %i) w=%i bsz=%i (%i,%i)\n",o>>5,o&31,m,p,w,bsz,(o&16383)+p,e);
-#endif
+*/
      if(e < bsz)
      {
        elems[cur_ele].address = e;
@@ -335,15 +314,15 @@ int main(int argc, char **argv)
        k = asz;
        asz -= m;
        asz += 3;
-       if(m>=255) asz+=2;
-       if((o>>14)>=255) asz+=2;
-       if(asz > k) /* >= */
+       if(m>=192) asz++;
+       if((o>>14)>=196) asz++;
+       if(asz >= k)
        {
          asz = k;
        }
        else
        {
-#if 1
+#ifdef DEBUG
          printf("Sequence %i bytes from #%4.4X is identical to offset %i/#%4.4X (estimation: %i)\n",
            elems[cur_ele].size,elems[cur_ele].address,elems[cur_ele].offset,((int)elems[cur_ele].offset)&0xFFFF,asz);
 #endif
@@ -368,18 +347,18 @@ int main(int argc, char **argv)
          l >>= 1;
          k--;
        }
-#if 0
+/*
        if(p<3||p==256) printf("j=%8.8X w=%8.8X (o=%7.7X|%02d)\n",j,w,o>>5,o&31);
-#endif
+*/
        cor_table[j] &= ~w;
       }
       else for(i=0;i<=((m+(o&31))>>5);i++)
       {
        if(k==0) break;
        j = ((p<<9)|((o>>5)&511))+i;
-#if 0
+/*
        if(p>3||p==256) printf("j=%8.8X i=%i k=%i (o=%7.7X|%02d)\n",j,i,k,o>>5,o&31);
-#endif
+*/
        if(i==0)
        {
          switch(o&31)
@@ -476,15 +455,15 @@ int main(int argc, char **argv)
         else m--;
       }
      }
-#if 0
+/*
      printf("cor_table after cleanup:\n");
      for(i=0;i<COR16K;i++)
      {
         if(cor_table[i]) printf("%8.8X=%8.8X\n",i,cor_table[i]);
      }
-#endif
+*/
    }
-   printf("Number of commands: %i\n",cur_ele);
+   printf("Number of detected sequences: %i\n",cur_ele);
    printf("Estimated compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
    for(i=0;i<cur_ele;i++)
    {
@@ -501,60 +480,34 @@ int main(int argc, char **argv)
      if(e) printf("ERROR: %i collisions detected at range #%4.4X...#%4.4X\n",
         e,elems[i].address,elems[i].address+elems[i].size-1);
    }
-   asz = 0;
+   asz = 3;
    for(i=0;i<bsz;i++)
    {
      if(one_block[i]>=0)
      {
        if(one_block[i]>255)
        {
-         freq[256]++;
          asz+=3;
          j = one_block[i]-1000;
          o = elems[j].offset;
          k = elems[j].size;
-         if(o > -255)
-         {
-           freq[-o]++;
-         }
-         else
-         {
-           freq[(o>>8)&255]++;
-           freq[o&255]++;
-           asz+=2;
-         }
-         if(k<255)
-         {
-           freq[k]++;
-         }
-         else
-         {
-           freq[(k>>8)&255]++;
-           freq[k&255]++;
-           asz+=2;
-         }
+         if(o < -191) asz++;
+         if(k > 195) asz++;
        }
        else
        {
-         freq[one_block[i]]++;
-         if(one_block[i]==255)
-         {
-//           asz++;
-         }
+         if(one_block[i]==255) asz++;
          asz++;
        }
      }
    }
    printf("Actual compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
+   fsz += asz;
  }
  if(!f_test) fclose(f);
 
- for(i=0;i<257;i++)
- {
-   if(freq[i]) printf("0x%2.2X;%i\n",i,freq[i]);
- }
- printf("\nGood bye!\n\n");
+ printf("\nCompressed file size: %i bytes\n",fsz);
 
+ printf("\nGood bye!\n\n");
  return 0;
 }
-
