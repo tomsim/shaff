@@ -28,6 +28,7 @@
 #define COR16K 16384/32*16384
 #define MAXELE 10000
 
+int freq[256];
 unsigned long cor_table[COR16K];
 short one_block[16384];
 struct one_ele { short address, offset, size; } elems[MAXELE];
@@ -299,7 +300,7 @@ int main(int argc, char **argv)
        }
      }
 
-     if(m<=3) break;
+     if(m<3) break;
      p = m;
      if((o&16383)+m > bsz) m = bsz-(o&16383);
      e = (o&16383)+(o>>14);
@@ -314,7 +315,7 @@ int main(int argc, char **argv)
        k = asz;
        asz -= m;
        asz += 3;
-       if(m>=192) asz++;
+       if(m>=128) asz++;
        if((o>>14)>=196) asz++;
        if(asz >= k)
        {
@@ -491,7 +492,7 @@ int main(int argc, char **argv)
          j = one_block[i]-1000;
          o = elems[j].offset;
          k = elems[j].size;
-         if(o < -191) asz++;
+         if(o < -127) asz++;
          if(k > 195) asz++;
        }
        else
@@ -501,7 +502,7 @@ int main(int argc, char **argv)
        }
      }
    }
-#if 1
+#if 0
    while(1)
    {
     memset(cor_table,0,sizeof(unsigned long)*COR16K);
@@ -547,6 +548,27 @@ int main(int argc, char **argv)
     asz -= k-4;
    }
    printf("Done with triades\n");
+#endif
+#if 1
+   k = 0;
+   for(i=0;i<8;i++) freq[i]=0;
+   for(i=0;i<bsz;i++)
+   {
+     if(one_block[i]>255)
+     {
+       j = one_block[i]-1000;
+       if(elems[j].offset==k) freq[0]++;
+       if(elems[j].offset==k+1) freq[1]++;
+       if(elems[j].offset==k+2) freq[2]++;
+       if(elems[j].offset==k+3) freq[3]++;
+       if(elems[j].offset==k && elems[j].size<=10) freq[4]++;
+       if(elems[j].offset==k-3) freq[5]++;
+       if(elems[j].offset==k-2) freq[6]++;
+       if(elems[j].offset==k-1) freq[7]++;
+       k = elems[j].offset;
+     }
+   }
+   for(i=0;i<8;i++) printf("freq[%i]=%i\n",i,freq[i]);
 #endif
    printf("Actual compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
    fsz += asz;
