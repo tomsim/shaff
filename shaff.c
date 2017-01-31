@@ -27,7 +27,7 @@
 #define COR16K 16384/32*16384
 #define MAXELE 10000
 
-unsigned int cor_table[COR16K];
+unsigned long cor_table[COR16K];
 short one_block[16384];
 struct one_ele { short address, offset, size, sizebits; } elems[MAXELE];
 int cur_ele = 0;
@@ -55,22 +55,22 @@ unsigned char sna_header[27];
    Source: http://www.worldofspectrum.org/faq/reference/formats.htm
 */
 
-int left_zero(unsigned int u)
+int left_zero(unsigned long u)
 {
  return ((u&0x80000000UL)==0)?1:0;
 }
 
-int right_zero(unsigned int u)
+int right_zero(unsigned long u)
 {
  return ((u&0x00000001UL)==0)?1:0;
 }
 
-int all_ones(unsigned int u)
+int all_ones(unsigned long u)
 {
  return (u==0xFFFFFFFFUL)?1:0;
 }
 
-int left_ones(unsigned int u)
+int left_ones(unsigned long u)
 {
  if((u&0x80000000UL)!=0x80000000UL) return 0;
  if((u&0xC0000000UL)!=0xC0000000UL) return 1;
@@ -107,7 +107,7 @@ int left_ones(unsigned int u)
  return 32;
 }
 
-int right_ones(unsigned int u)
+int right_ones(unsigned long u)
 {
  if((u&0x00000001UL)!=0x00000001UL) return 0;
  if((u&0x00000003UL)!=0x00000003UL) return 1;
@@ -147,8 +147,8 @@ int right_ones(unsigned int u)
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
- int i,j,k,m,n,o,p,w,z,e,o1,o2,o3,o4,o5,o6,o7,o8,o9,o10,sz,asz,bsz,csz,fsz,gsz,isz,pt=0;
- unsigned int l;
+ int i,j,k,m,n,o,p,w,z,e,o1,o2,sz,asz,bsz,csz,fsz,gsz,isz,pt=0;
+ unsigned long l;
  char *po,fname[100];
 
  printf("\nSHAFF v" VERSION " (C) 2013, Alexander A. Shabarshin <ashabarshin@gmail.com>\n");
@@ -156,7 +156,7 @@ int main(int argc, char **argv)
  {
    if(argc<2)
    {
-     printf("\nUsage:\n\tshaff [options] file.bin %i\n\n",sizeof(unsigned int));
+     printf("\nUsage:\n\tshaff [options] file.bin\n\n");
      return 0;
    }
    strncpy(fname,argv[1],100);
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
  {
    printf("\nBlock %i:\n",++n);
    printf("Cleaning %i words...\n",COR16K);
-   memset(cor_table,0,sizeof(unsigned int)*COR16K);
+   memset(cor_table,0,sizeof(unsigned long)*COR16K);
    printf("Cleaning Ok\n");
    for(i=(f_test?sz:0);i<16384;i++) one_block[i]=-1;
    k = sz - pt;
@@ -257,7 +257,7 @@ int main(int argc, char **argv)
        cor_table[o++] = m;
      }
    }
-   o1 = o2 = o3 = o4 = o5 = o6 = o7 = o8 = o9 = o10 = -1;
+   o1 = o2 = 1;
    cur_ele = 0;
    while(1)
    {
@@ -526,22 +526,14 @@ int main(int argc, char **argv)
          o = elems[j].offset;
          k = elems[j].size;
          if(k==2) asz--;
-         if(o==o1 || o==o2 || o3==o || o4==o || o5==o || o6==o || o7==o || o8==o || o9==o || o10==o || o==-1)
+         if(o==o1 || o==o2 || o==1)
          {
-           if(o==-1) printf("special 0 (%i)\n",o);
-           else if(o==o1) printf("special 1 (%i)\n",o);
-           else if(o==o2) printf("special 2 (%i)\n",o);
-           else if(o==o3) printf("special 3 (%i)\n",o);
-           else if(o==o4) printf("special 4 (%i)\n",o);
-           else if(o==o5) printf("special 5 (%i)\n",o);
-           else if(o==o6) printf("special 6 (%i)\n",o);
-           else if(o==o7) printf("special 7 (%i)\n",o);
-           else if(o==o8) printf("special 8 (%i)\n",o);
-           else if(o==o9) printf("special 9 (%i)\n",o);
-           else if(o==o10) printf("special 10 (%i)\n",o);
+           if(o==-1) printf("special -1 (-1)\n");
+           if(o==o1) printf("special 0 (%i)\n",o);
+           if(o==o2) printf("special 1 (%i)\n",o);
            csz -= 4;
          }
-#if 1
+#if 0
          else if(o < -128)
          {
            if(k>3) asz++;
@@ -564,18 +556,8 @@ int main(int argc, char **argv)
            asz++;
          }
          csz += elems[j].sizebits;
-         if(o!=-1 && o!=o1)
-         {
-           o10 = o9;
-           o9 = o8;
-           o8 = o7;
-           o6 = o5;
-           o5 = o4;
-           o4 = o3;
-           o3 = o2;
-           o2 = o1;
-           o1 = o;
-         }
+         o2 = o1;
+         o1 = o;
        }
        else
        {
