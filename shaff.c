@@ -9,12 +9,12 @@
    the Free Software Foundation, either version 3 of the License, or
    (at your option) any later version.
 
-   This program is distributed in the hope that it will be useful,
+   This program is distributed in the hope that it will be usef,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+   MERCHANTABILITY or FITNESS FOR A PARTICAR PURPOSE. See the
    GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
+   You shod have received a copy of the GNU General Public License
    along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
@@ -26,14 +26,17 @@
 #if 1
 #define DEBUG
 #endif
-#define COR16K ((16384/32)*16384)
-#define MAXELE 15000
 
-unsigned long cor_table[COR16K];
-short one_block[16384];
-struct one_ele { short address, offset, size, oldval; } elems[MAXELE];
-int cur_ele = 0;
-int ver = 1;
+/* Code is written to be executed on 32-bit or 64-bit systems with 32-bit int */
+
+#define COR16K ((16384/32)*16384)
+#define MAXCOPIES 16384
+
+unsigned int cor_table[COR16K]; /* This is 32MB */
+short one_block[16384]; /* Encoded state of every byte in current block */
+struct one_copy { short address, offset, size, oldval; } copies[MAXCOPIES];
+int cur_copy = 0;
+int ver = 0;
 int lim = 0;
 int f_decode = 0;
 int f_blocks = 0;
@@ -60,92 +63,92 @@ unsigned char sna_header[27];
    Source: http://www.worldofspectrum.org/faq/reference/formats.htm
 */
 
-int left_zero(unsigned long u)
+int left_zero(unsigned int u)
 {
- return ((u&0x80000000UL)==0)?1:0;
+ return ((u&0x80000000)==0)?1:0;
 }
 
-int right_zero(unsigned long u)
+int right_zero(unsigned int u)
 {
- return ((u&0x00000001UL)==0)?1:0;
+ return ((u&0x00000001)==0)?1:0;
 }
 
-int all_ones(unsigned long u)
+int all_ones(unsigned int u)
 {
- return (u==0xFFFFFFFFUL)?1:0;
+ return (u==0xFFFFFFFF)?1:0;
 }
 
-int left_ones(unsigned long u)
+int left_ones(unsigned int u)
 {
- if((u&0x80000000UL)!=0x80000000UL) return 0;
- if((u&0xC0000000UL)!=0xC0000000UL) return 1;
- if((u&0xE0000000UL)!=0xE0000000UL) return 2;
- if((u&0xF0000000UL)!=0xF0000000UL) return 3;
- if((u&0xF8000000UL)!=0xF8000000UL) return 4;
- if((u&0xFC000000UL)!=0xFC000000UL) return 5;
- if((u&0xFE000000UL)!=0xFE000000UL) return 6;
- if((u&0xFF000000UL)!=0xFF000000UL) return 7;
- if((u&0xFF800000UL)!=0xFF800000UL) return 8;
- if((u&0xFFC00000UL)!=0xFFC00000UL) return 9;
- if((u&0xFFE00000UL)!=0xFFE00000UL) return 10;
- if((u&0xFFF00000UL)!=0xFFF00000UL) return 11;
- if((u&0xFFF80000UL)!=0xFFF80000UL) return 12;
- if((u&0xFFFC0000UL)!=0xFFFC0000UL) return 13;
- if((u&0xFFFE0000UL)!=0xFFFE0000UL) return 14;
- if((u&0xFFFF0000UL)!=0xFFFF0000UL) return 15;
- if((u&0xFFFF8000UL)!=0xFFFF8000UL) return 16;
- if((u&0xFFFFC000UL)!=0xFFFFC000UL) return 17;
- if((u&0xFFFFE000UL)!=0xFFFFE000UL) return 18;
- if((u&0xFFFFF000UL)!=0xFFFFF000UL) return 19;
- if((u&0xFFFFF800UL)!=0xFFFFF800UL) return 20;
- if((u&0xFFFFFC00UL)!=0xFFFFFC00UL) return 21;
- if((u&0xFFFFFE00UL)!=0xFFFFFE00UL) return 22;
- if((u&0xFFFFFF00UL)!=0xFFFFFF00UL) return 23;
- if((u&0xFFFFFF80UL)!=0xFFFFFF80UL) return 24;
- if((u&0xFFFFFFC0UL)!=0xFFFFFFC0UL) return 25;
- if((u&0xFFFFFFE0UL)!=0xFFFFFFE0UL) return 26;
- if((u&0xFFFFFFF0UL)!=0xFFFFFFF0UL) return 27;
- if((u&0xFFFFFFF8UL)!=0xFFFFFFF8UL) return 28;
- if((u&0xFFFFFFFCUL)!=0xFFFFFFFCUL) return 29;
- if((u&0xFFFFFFFEUL)!=0xFFFFFFFEUL) return 30;
- if((u&0xFFFFFFFFUL)!=0xFFFFFFFFUL) return 31;
+ if((u&0x80000000)!=0x80000000) return 0;
+ if((u&0xC0000000)!=0xC0000000) return 1;
+ if((u&0xE0000000)!=0xE0000000) return 2;
+ if((u&0xF0000000)!=0xF0000000) return 3;
+ if((u&0xF8000000)!=0xF8000000) return 4;
+ if((u&0xFC000000)!=0xFC000000) return 5;
+ if((u&0xFE000000)!=0xFE000000) return 6;
+ if((u&0xFF000000)!=0xFF000000) return 7;
+ if((u&0xFF800000)!=0xFF800000) return 8;
+ if((u&0xFFC00000)!=0xFFC00000) return 9;
+ if((u&0xFFE00000)!=0xFFE00000) return 10;
+ if((u&0xFFF00000)!=0xFFF00000) return 11;
+ if((u&0xFFF80000)!=0xFFF80000) return 12;
+ if((u&0xFFFC0000)!=0xFFFC0000) return 13;
+ if((u&0xFFFE0000)!=0xFFFE0000) return 14;
+ if((u&0xFFFF0000)!=0xFFFF0000) return 15;
+ if((u&0xFFFF8000)!=0xFFFF8000) return 16;
+ if((u&0xFFFFC000)!=0xFFFFC000) return 17;
+ if((u&0xFFFFE000)!=0xFFFFE000) return 18;
+ if((u&0xFFFFF000)!=0xFFFFF000) return 19;
+ if((u&0xFFFFF800)!=0xFFFFF800) return 20;
+ if((u&0xFFFFFC00)!=0xFFFFFC00) return 21;
+ if((u&0xFFFFFE00)!=0xFFFFFE00) return 22;
+ if((u&0xFFFFFF00)!=0xFFFFFF00) return 23;
+ if((u&0xFFFFFF80)!=0xFFFFFF80) return 24;
+ if((u&0xFFFFFFC0)!=0xFFFFFFC0) return 25;
+ if((u&0xFFFFFFE0)!=0xFFFFFFE0) return 26;
+ if((u&0xFFFFFFF0)!=0xFFFFFFF0) return 27;
+ if((u&0xFFFFFFF8)!=0xFFFFFFF8) return 28;
+ if((u&0xFFFFFFFC)!=0xFFFFFFFC) return 29;
+ if((u&0xFFFFFFFE)!=0xFFFFFFFE) return 30;
+ if((u&0xFFFFFFFF)!=0xFFFFFFFF) return 31;
  return 32;
 }
 
-int right_ones(unsigned long u)
+int right_ones(unsigned int u)
 {
- if((u&0x00000001UL)!=0x00000001UL) return 0;
- if((u&0x00000003UL)!=0x00000003UL) return 1;
- if((u&0x00000007UL)!=0x00000007UL) return 2;
- if((u&0x0000000FUL)!=0x0000000FUL) return 3;
- if((u&0x0000001FUL)!=0x0000001FUL) return 4;
- if((u&0x0000003FUL)!=0x0000003FUL) return 5;
- if((u&0x0000007FUL)!=0x0000007FUL) return 6;
- if((u&0x000000FFUL)!=0x000000FFUL) return 7;
- if((u&0x000001FFUL)!=0x000001FFUL) return 8;
- if((u&0x000003FFUL)!=0x000003FFUL) return 9;
- if((u&0x000007FFUL)!=0x000007FFUL) return 10;
- if((u&0x00000FFFUL)!=0x00000FFFUL) return 11;
- if((u&0x00001FFFUL)!=0x00001FFFUL) return 12;
- if((u&0x00003FFFUL)!=0x00003FFFUL) return 13;
- if((u&0x00007FFFUL)!=0x00007FFFUL) return 14;
- if((u&0x0000FFFFUL)!=0x0000FFFFUL) return 15;
- if((u&0x0001FFFFUL)!=0x0001FFFFUL) return 16;
- if((u&0x0003FFFFUL)!=0x0003FFFFUL) return 17;
- if((u&0x0007FFFfUL)!=0x0007FFFFUL) return 18;
- if((u&0x000FFFFFUL)!=0x000FFFFFUL) return 19;
- if((u&0x001FFFFFUL)!=0x001FFFFFUL) return 20;
- if((u&0x003FFFFFUL)!=0x003FFFFFUL) return 21;
- if((u&0x007FFFFFUL)!=0x007FFFFFUL) return 22;
- if((u&0x00FFFFFFUL)!=0x00FFFFFFUL) return 23;
- if((u&0x01FFFFFFUL)!=0x01FFFFFFUL) return 24;
- if((u&0x03FFFFFFUL)!=0x03FFFFFFUL) return 25;
- if((u&0x07FFFFFFUL)!=0x07FFFFFFUL) return 26;
- if((u&0x0FFFFFFFUL)!=0x0FFFFFFFUL) return 27;
- if((u&0x1FFFFFFFUL)!=0x1FFFFFFFUL) return 28;
- if((u&0x3FFFFFFFUL)!=0x3FFFFFFFUL) return 29;
- if((u&0x7FFFFFFFUL)!=0x7FFFFFFFUL) return 30;
- if((u&0xFFFFFFFFUL)!=0xFFFFFFFFUL) return 31;
+ if((u&0x00000001)!=0x00000001) return 0;
+ if((u&0x00000003)!=0x00000003) return 1;
+ if((u&0x00000007)!=0x00000007) return 2;
+ if((u&0x0000000F)!=0x0000000F) return 3;
+ if((u&0x0000001F)!=0x0000001F) return 4;
+ if((u&0x0000003F)!=0x0000003F) return 5;
+ if((u&0x0000007F)!=0x0000007F) return 6;
+ if((u&0x000000FF)!=0x000000FF) return 7;
+ if((u&0x000001FF)!=0x000001FF) return 8;
+ if((u&0x000003FF)!=0x000003FF) return 9;
+ if((u&0x000007FF)!=0x000007FF) return 10;
+ if((u&0x00000FFF)!=0x00000FFF) return 11;
+ if((u&0x00001FFF)!=0x00001FFF) return 12;
+ if((u&0x00003FFF)!=0x00003FFF) return 13;
+ if((u&0x00007FFF)!=0x00007FFF) return 14;
+ if((u&0x0000FFFF)!=0x0000FFFF) return 15;
+ if((u&0x0001FFFF)!=0x0001FFFF) return 16;
+ if((u&0x0003FFFF)!=0x0003FFFF) return 17;
+ if((u&0x0007FFFf)!=0x0007FFFF) return 18;
+ if((u&0x000FFFFF)!=0x000FFFFF) return 19;
+ if((u&0x001FFFFF)!=0x001FFFFF) return 20;
+ if((u&0x003FFFFF)!=0x003FFFFF) return 21;
+ if((u&0x007FFFFF)!=0x007FFFFF) return 22;
+ if((u&0x00FFFFFF)!=0x00FFFFFF) return 23;
+ if((u&0x01FFFFFF)!=0x01FFFFFF) return 24;
+ if((u&0x03FFFFFF)!=0x03FFFFFF) return 25;
+ if((u&0x07FFFFFF)!=0x07FFFFFF) return 26;
+ if((u&0x0FFFFFFF)!=0x0FFFFFFF) return 27;
+ if((u&0x1FFFFFFF)!=0x1FFFFFFF) return 28;
+ if((u&0x3FFFFFFF)!=0x3FFFFFFF) return 29;
+ if((u&0x7FFFFFFF)!=0x7FFFFFFF) return 30;
+ if((u&0xFFFFFFFF)!=0xFFFFFFFF) return 31;
  return 32;
 }
 
@@ -164,11 +167,11 @@ int main(int argc, char **argv)
    {
      printf("\nUsage:\n\tshaff [options] filename\n\n");
      printf("where options are\n");
-     printf("\t-v0 to force SHAFF0 file format\n");
-     printf("\t-v1 to force SHAFF1 file format (set by default in this version)\n");
-     printf("\t-d to decompress SHAFF0 or SHAFF1 compressed files\n");
+     printf("\t-v0 to force SHAFF0 file format (by default)\n");
+     printf("\t-v1 to force SHAFF1 file format\n");
      printf("\t-b to save blocks as separate files without headers\n");
-     printf("\t-lN to limit minimal size of detected sequences (by default 2 for v1 and 4 for v0)\n");
+     printf("\t-lN to limit length of copies (by default 2 for v1 and 4 for v0)\n");
+     printf("\t-d to decode SHAFF0 or SHAFF1 compressed file\n");
      printf("\n");
      return 0;
    }
@@ -293,7 +296,7 @@ int main(int argc, char **argv)
        cor_table[o++] = m;
      }
    }
-   cur_ele = 0;
+   cur_copy = 0;
    while(1)
    {
      m = 0;
@@ -352,14 +355,14 @@ int main(int argc, char **argv)
      e = (o&16383)+(o>>14);
      if(e < bsz)
      {
-       elems[cur_ele].address = e;
-       elems[cur_ele].offset = -(o>>14);
-       elems[cur_ele].size = m;
+       copies[cur_copy].address = e;
+       copies[cur_copy].offset = -(o>>14);
+       copies[cur_copy].size = m;
 
 #ifdef DEBUG
-       printf("Matched address=#%4.4X size=%i offset=%i/#%4.4X\n",elems[cur_ele].address,elems[cur_ele].size,elems[cur_ele].offset,((int)elems[cur_ele].offset)&0xFFFF);
+       printf("Matched address=#%4.4X size=%i offset=%i/#%4.4X\n",copies[cur_copy].address,copies[cur_copy].size,copies[cur_copy].offset,((int)copies[cur_copy].offset)&0xFFFF);
 #endif
-       if(++cur_ele>=MAXELE)
+       if(++cur_copy>=MAXCOPIES)
        {
          if(f!=NULL) fclose(f);
          if(fo!=NULL) fclose(fo);
@@ -394,37 +397,37 @@ int main(int argc, char **argv)
        {
          switch(o&31)
          {
-           case 31: cor_table[j]&=0xFFFFFFFEUL; break;
-           case 30: cor_table[j]&=0xFFFFFFFCUL; break;
-           case 29: cor_table[j]&=0xFFFFFFF8UL; break;
-           case 28: cor_table[j]&=0xFFFFFFF0UL; break;
-           case 27: cor_table[j]&=0xFFFFFFE0UL; break;
-           case 26: cor_table[j]&=0xFFFFFFC0UL; break;
-           case 25: cor_table[j]&=0xFFFFFF80UL; break;
-           case 24: cor_table[j]&=0xFFFFFF00UL; break;
-           case 23: cor_table[j]&=0xFFFFFE00UL; break;
-           case 22: cor_table[j]&=0xFFFFFC00UL; break;
-           case 21: cor_table[j]&=0xFFFFF800UL; break;
-           case 20: cor_table[j]&=0xFFFFF000UL; break;
-           case 19: cor_table[j]&=0xFFFFE000UL; break;
-           case 18: cor_table[j]&=0xFFFFC000UL; break;
-           case 17: cor_table[j]&=0xFFFF8000UL; break;
-           case 16: cor_table[j]&=0xFFFF0000UL; break;
-           case 15: cor_table[j]&=0xFFFE0000UL; break;
-           case 14: cor_table[j]&=0xFFFC0000UL; break;
-           case 13: cor_table[j]&=0xFFF80000UL; break;
-           case 12: cor_table[j]&=0xFFF00000UL; break;
-           case 11: cor_table[j]&=0xFFE00000UL; break;
-           case 10: cor_table[j]&=0xFFC00000UL; break;
-           case  9: cor_table[j]&=0xFF800000UL; break;
-           case  8: cor_table[j]&=0xFF000000UL; break;
-           case  7: cor_table[j]&=0xFE000000UL; break;
-           case  6: cor_table[j]&=0xFC000000UL; break;
-           case  5: cor_table[j]&=0xF8000000UL; break;
-           case  4: cor_table[j]&=0xF0000000UL; break;
-           case  3: cor_table[j]&=0xE0000000UL; break;
-           case  2: cor_table[j]&=0xC0000000UL; break;
-           case  1: cor_table[j]&=0x80000000UL; break;
+           case 31: cor_table[j]&=0xFFFFFFFE; break;
+           case 30: cor_table[j]&=0xFFFFFFFC; break;
+           case 29: cor_table[j]&=0xFFFFFFF8; break;
+           case 28: cor_table[j]&=0xFFFFFFF0; break;
+           case 27: cor_table[j]&=0xFFFFFFE0; break;
+           case 26: cor_table[j]&=0xFFFFFFC0; break;
+           case 25: cor_table[j]&=0xFFFFFF80; break;
+           case 24: cor_table[j]&=0xFFFFFF00; break;
+           case 23: cor_table[j]&=0xFFFFFE00; break;
+           case 22: cor_table[j]&=0xFFFFFC00; break;
+           case 21: cor_table[j]&=0xFFFFF800; break;
+           case 20: cor_table[j]&=0xFFFFF000; break;
+           case 19: cor_table[j]&=0xFFFFE000; break;
+           case 18: cor_table[j]&=0xFFFFC000; break;
+           case 17: cor_table[j]&=0xFFFF8000; break;
+           case 16: cor_table[j]&=0xFFFF0000; break;
+           case 15: cor_table[j]&=0xFFFE0000; break;
+           case 14: cor_table[j]&=0xFFFC0000; break;
+           case 13: cor_table[j]&=0xFFF80000; break;
+           case 12: cor_table[j]&=0xFFF00000; break;
+           case 11: cor_table[j]&=0xFFE00000; break;
+           case 10: cor_table[j]&=0xFFC00000; break;
+           case  9: cor_table[j]&=0xFF800000; break;
+           case  8: cor_table[j]&=0xFF000000; break;
+           case  7: cor_table[j]&=0xFE000000; break;
+           case  6: cor_table[j]&=0xFC000000; break;
+           case  5: cor_table[j]&=0xF8000000; break;
+           case  4: cor_table[j]&=0xF0000000; break;
+           case  3: cor_table[j]&=0xE0000000; break;
+           case  2: cor_table[j]&=0xC0000000; break;
+           case  1: cor_table[j]&=0x80000000; break;
            case  0: cor_table[j] = 0; break;
          }
          k -= 32-(o&31);
@@ -435,37 +438,37 @@ int main(int argc, char **argv)
          switch(k&31)
          {
            case  0: cor_table[j] = 0; break;
-           case  1: cor_table[j]&=0x7FFFFFFFUL; break;
-           case  2: cor_table[j]&=0x3FFFFFFFUL; break;
-           case  3: cor_table[j]&=0x1FFFFFFFUL; break;
-           case  4: cor_table[j]&=0x0FFFFFFFUL; break;
-           case  5: cor_table[j]&=0x07FFFFFFUL; break;
-           case  6: cor_table[j]&=0x03FFFFFFUL; break;
-           case  7: cor_table[j]&=0x01FFFFFFUL; break;
-           case  8: cor_table[j]&=0x00FFFFFFUL; break;
-           case  9: cor_table[j]&=0x007FFFFFUL; break;
-           case 10: cor_table[j]&=0x003FFFFFUL; break;
-           case 11: cor_table[j]&=0x001FFFFFUL; break;
-           case 12: cor_table[j]&=0x000FFFFFUL; break;
-           case 13: cor_table[j]&=0x0007FFFFUL; break;
-           case 14: cor_table[j]&=0x0003FFFFUL; break;
-           case 15: cor_table[j]&=0x0001FFFFUL; break;
-           case 16: cor_table[j]&=0x0000FFFFUL; break;
-           case 17: cor_table[j]&=0x00007FFFUL; break;
-           case 18: cor_table[j]&=0x00003FFFUL; break;
-           case 19: cor_table[j]&=0x00001FFFUL; break;
-           case 20: cor_table[j]&=0x00000FFFUL; break;
-           case 21: cor_table[j]&=0x000007FFUL; break;
-           case 22: cor_table[j]&=0x000003FFUL; break;
-           case 23: cor_table[j]&=0x000001FFUL; break;
-           case 24: cor_table[j]&=0x000000FFUL; break;
-           case 25: cor_table[j]&=0x0000007FUL; break;
-           case 26: cor_table[j]&=0x0000003FUL; break;
-           case 27: cor_table[j]&=0x0000001FUL; break;
-           case 28: cor_table[j]&=0x0000000FUL; break;
-           case 29: cor_table[j]&=0x00000007UL; break;
-           case 30: cor_table[j]&=0x00000003UL; break;
-           case 31: cor_table[j]&=0x00000001UL; break;
+           case  1: cor_table[j]&=0x7FFFFFFF; break;
+           case  2: cor_table[j]&=0x3FFFFFFF; break;
+           case  3: cor_table[j]&=0x1FFFFFFF; break;
+           case  4: cor_table[j]&=0x0FFFFFFF; break;
+           case  5: cor_table[j]&=0x07FFFFFF; break;
+           case  6: cor_table[j]&=0x03FFFFFF; break;
+           case  7: cor_table[j]&=0x01FFFFFF; break;
+           case  8: cor_table[j]&=0x00FFFFFF; break;
+           case  9: cor_table[j]&=0x007FFFFF; break;
+           case 10: cor_table[j]&=0x003FFFFF; break;
+           case 11: cor_table[j]&=0x001FFFFF; break;
+           case 12: cor_table[j]&=0x000FFFFF; break;
+           case 13: cor_table[j]&=0x0007FFFF; break;
+           case 14: cor_table[j]&=0x0003FFFF; break;
+           case 15: cor_table[j]&=0x0001FFFF; break;
+           case 16: cor_table[j]&=0x0000FFFF; break;
+           case 17: cor_table[j]&=0x00007FFF; break;
+           case 18: cor_table[j]&=0x00003FFF; break;
+           case 19: cor_table[j]&=0x00001FFF; break;
+           case 20: cor_table[j]&=0x00000FFF; break;
+           case 21: cor_table[j]&=0x000007FF; break;
+           case 22: cor_table[j]&=0x000003FF; break;
+           case 23: cor_table[j]&=0x000001FF; break;
+           case 24: cor_table[j]&=0x000000FF; break;
+           case 25: cor_table[j]&=0x0000007F; break;
+           case 26: cor_table[j]&=0x0000003F; break;
+           case 27: cor_table[j]&=0x0000001F; break;
+           case 28: cor_table[j]&=0x0000000F; break;
+           case 29: cor_table[j]&=0x00000007; break;
+           case 30: cor_table[j]&=0x00000003; break;
+           case 31: cor_table[j]&=0x00000001; break;
          }
          k = 0;
          break;
@@ -489,14 +492,14 @@ int main(int argc, char **argv)
       }
      }
    }
-   printf("Number of matches: %i\n",cur_ele);
-   for(i=0;i<cur_ele;i++)
+   printf("Number of matches: %i\n",cur_copy);
+   for(i=0;i<cur_copy;i++)
    {
-     j = elems[i].address;
-     k = elems[i].size;
+     j = copies[i].address;
+     k = copies[i].size;
      e = 0;
      if(one_block[j]<0 || one_block[j]>255) e++;
-     elems[i].oldval = one_block[j];
+     copies[i].oldval = one_block[j];
      one_block[j++] = 1000 + i;
      while(--k)
      {
@@ -504,10 +507,10 @@ int main(int argc, char **argv)
        one_block[j++] -= 256;
      }
      if(e) printf("ERROR: %i collisions detected within range #%4.4X...#%4.4X\n",
-        e,elems[i].address,elems[i].address+elems[i].size-1);
+        e,copies[i].address,copies[i].address+copies[i].size-1);
    }
-   asz = 3;
-   csz = 18;
+   asz = 3; /* v0 byte counter */
+   csz = 18; /* v1 bit counter */
    b = -1;
    d = dd = 0;
    for(i=0;i<bsz;i++)
@@ -519,17 +522,17 @@ int main(int argc, char **argv)
          asz += 3;
          csz += 18;
          j = one_block[i]-1000;
-         o = elems[j].offset;
-         k = elems[j].size;
+         o = copies[j].offset;
+         k = copies[j].size;
          if(k==2)
          {
            asz--;
          }
-         if(ver==0 && o < -190)
+         if(ver==0 && o < -190) /* SHAFF0 */
          {
            if(k>3) asz++;
          }
-         if(ver==1)
+         else if(ver==1) /* SHAFF1 */
          {
            if(o==d || o==dd || o==-1)
            {
@@ -563,9 +566,10 @@ int main(int argc, char **argv)
          o = -1;
          while(k){k>>=1;o++;}
          isz += o+o;
-         elems[cur_ele].sizebits = o+o;
+         copies[cur_copy].sizebits = o+o;
+
+         csz += copies[j].sizebits; ?????
 */
-         csz += elems[j].sizebits;
          if(o!=dd&&o!=-1){dd=d;d=o;}
        }
        else
