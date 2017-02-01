@@ -8,6 +8,7 @@ Then optional uncompressed data - for SNA format it is
 Bytes 12...14 "SNA" - signature to identify SNA header
 Bytes 15...41 - SNA 27-byte header itself
 
+
 SHAFF0 data format:
 
 XX - any byte other than #FF is a single data byte
@@ -22,6 +23,7 @@ LENGTH is 1 or 2 bytes:
 1xxxxxxx - for 4...131
 01xxxxxx - for 132..195
 00xxxxxx xxxxxxxx - for up to 16383
+
 
 SHAFF1 data format:
 

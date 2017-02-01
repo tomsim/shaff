@@ -1,8 +1,8 @@
-/* shaff.c - simple LZ-like archiver (10/06/2013 - 10/25/2013)
+/* shaff.c - simple LZ77-like compression (started 6-Oct-2013)
 
    Part of NedoPC SDK (software development kit for simple devices)
 
-   Copyright (C) 2013, Alexander A. Shabarshin <ashabarshin@gmail.com>
+   Copyright (C) 2013,2017 A.A.Shabarshin <me@shaos.net>
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -156,7 +156,8 @@ int main(int argc, char **argv)
  unsigned long l;
  char *po,fname[100];
 
- printf("\nSHAFF v" VERSION " (C) 2013, Alexander A. Shabarshin <ashabarshin@gmail.com>\n");
+ printf("\nSHAFF v" VERSION " (C) 2013,2017 A.A.Shabarshin <me@shaos.net>\n");
+
  if(!f_test)
  {
    if(argc<2)
