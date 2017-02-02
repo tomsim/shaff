@@ -1,10 +1,10 @@
 SHAFF header:
 
 Bytes 0...5 - signature and version ("SHAFF0" or "SHAFF1")
-Bytes 6,7 - offset to beginning of 1st block of encoded data (big-endian)
+Bytes 6,7 - offset to the 1st block of encoded data (big-endian)
 Bytes 8,9 - number of 16K blocks (big-endian)
-Bytes 10,11 - size of the last block (less or equal to 16384)
-Then optional uncompressed data - for SNA format it is
+Bytes 10,11 - size of the last block (less or equal to 16384, also big-endian)
+Then optional uncompressed auxilary data, for example in case of SNA-file:
 Bytes 12...14 "SNA" - signature to identify SNA header
 Bytes 15...41 - SNA 27-byte header itself
 
@@ -29,7 +29,7 @@ SHAFF1 data format:
 
 0xxxxxxx - single byte #00...#7F
 10xxxxxxx - single byte #80...#FF
-110000 - repeat last single byte (no LENGTH after that
+110000 - repeat last single byte (no LENGTH after that)
 110001 LENGTH - repeat last distance longer than -1 and not equal to previous
 110010 LENGTH - repeat previous last distance longer than -1
 110011 LENGTH - distance -1 (that basically means copy of the last byte LENGTH times)
@@ -38,7 +38,8 @@ SHAFF1 data format:
 11101xxxxxxxxxx LENGTH - distance from -322 (0000000000) to -1345 (1111111111)
 1111xxxxxxxxxxxxxx LENGTH - distance up to -16383 (directly encoded with prefix 11)
 special case without LENGTH:
-111100000000000000 - end of block (and anything above 111111101010111110 is reserved)
+111100000000000000 - end of block (after that last byte padded by zero bits)
+and anything above 111111101010111110 is reserved!
 
 LENGTH is a sequence of 2...26 bits that encode length of the copy:
 0x - for 2 (encoded by 0) and 3 (encoded by 1)

@@ -22,18 +22,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VERSION "1.0"
+#define VERSION "1.0alpha"
 #if 1
 #define DEBUG
 #endif
 
 /* Code is written to be executed on 32-bit or 64-bit systems with 32-bit int */
 
-#define COR16K ((16384/32)*16384)
-#define MAXCOPIES 16384
+#define BLOCKSZ (16384)
+#define BLOCKMS (BLOCKSZ-1)
+#define COR16K ((BLOCKSZ/32)*BLOCKSZ)
+#define MAXCOPIES BLOCKSZ
 
-unsigned int cor_table[COR16K]; /* This is 32MB */
-short one_block[16384]; /* Encoded state of every byte in current block */
+unsigned int cor_table[COR16K]; /* 8MB of globals */
+short one_block[BLOCKSZ]; /* State of every byte in current block */
 struct one_copy { short address, offset, size, oldval; } copies[MAXCOPIES];
 int cur_copy = 0;
 int ver = 0;
@@ -63,20 +65,7 @@ unsigned char sna_header[27];
    Source: http://www.worldofspectrum.org/faq/reference/formats.htm
 */
 
-int left_zero(unsigned int u)
-{
- return ((u&0x80000000)==0)?1:0;
-}
-
-int right_zero(unsigned int u)
-{
- return ((u&0x00000001)==0)?1:0;
-}
-
-int all_ones(unsigned int u)
-{
- return (u==0xFFFFFFFF)?1:0;
-}
+#define all_ones(u) ((u)==0xFFFFFFFF)
 
 int left_ones(unsigned int u)
 {
@@ -155,11 +144,11 @@ int right_ones(unsigned int u)
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
- int i,j,k,m,n,o,p,w,z,e,b,d,dd,sz,asz,bsz,csz,fsz,gsz,pt=0;
- unsigned long l;
+ int i,j,k,m,n,o,p,w,z,e,b,d,dd,sz,asz,bsz,csz,fsz,pt=0;
+ unsigned long l=0;
  char *po,fname[100];
 
- printf("\nSHAFF v" VERSION " (C) 2013,2017 A.A.Shabarshin <me@shaos.net>\n");
+ printf("\nSHAFF v" VERSION " (C) 2013,2017 A.A.Shabarshin <me@shaos.net>\n\n");
 
  if(!f_test)
  {
@@ -167,10 +156,10 @@ int main(int argc, char **argv)
    {
      printf("\nUsage:\n\tshaff [options] filename\n\n");
      printf("where options are\n");
-     printf("\t-v0 to force SHAFF0 file format (by default)\n");
-     printf("\t-v1 to force SHAFF1 file format\n");
-     printf("\t-b to save blocks as separate files without headers\n");
-     printf("\t-lN to limit length of copies (by default 2 for v1 and 4 for v0)\n");
+     printf("\t-0 to force SHAFF0 file format (by default)\n");
+     printf("\t-1 to force SHAFF1 file format\n");
+     printf("\t-b to save blocks as separate files\n");
+     printf("\t-lN to limit length of matches (by default 2 for v1 and 4 for v0)\n");
      printf("\t-d to decode SHAFF0 or SHAFF1 compressed file\n");
      printf("\n");
      return 0;
@@ -181,18 +170,19 @@ int main(int argc, char **argv)
      {
        switch(argv[i][1])
        {
+         case '0': ver = 0; break;
+         case '1': ver = 1; break;
          case 'd': f_decode = 1; break;
          case 'b': f_blocks = 1; break;
-         case 'v': ver = atoi(&argv[i][2]); break;
          case 'l': lim = atoi(&argv[i][2]); break;
        }
      }
      else strncpy(fname,argv[i],100);
    }
    fname[99] = 0;
-   if(!strcmp(fname,"test")) f_test = 1;
+   if(!strcmp(fname,"TEST")) f_test = 1;
  }
- fsz = gsz = 12;
+ fsz = 12;
  if(f_test)
  {
    sz = 0;
@@ -209,7 +199,7 @@ int main(int argc, char **argv)
  }
  else
  {
-   printf("\nOpening file '%s'\n",fname);
+   printf("Opening file '%s'\n",fname);
    f = fopen(fname,"rb");
    if(f==NULL)
    {
@@ -219,8 +209,8 @@ int main(int argc, char **argv)
    if(strstr(fname,".sna")!=NULL || strstr(fname,".SNA")!=NULL) f_sna = 1;
    fseek(f,0,SEEK_END);
    sz = ftell(f);
-   printf("Original file size: %i bytes (SNA=%c)\n",sz,f_sna?'Y':'N');
    fseek(f,0,SEEK_SET);
+   printf("Original file size: %i bytes (SNA=%c)\n",sz,f_sna?'Y':'N');
    if(f_sna)
    {
      if(sz!=49179)
@@ -229,25 +219,23 @@ int main(int argc, char **argv)
        printf("ERROR: Invalid SNA file '%s'\n",fname);
        return -2;
      }
-     po = strstr(fname,".SNA");
-     if(po!=NULL){po[1]='s';po[2]='n';po[3]='a';}
-   }
-   strcat(fname,"ff");
-   fo = fopen(fname,"wb");
-   if(fo==NULL)
-   {
-     if(f!=NULL) fclose(f);
-     printf("ERROR: Can't open file '%s' for writing\n",fname);
-     return -3;
-   }
-   if(f_sna)
-   {
      fread(sna_header,1,27,f);
-     pt = 27;
+/*     pt = 27;  */
+     sz -= 27;
      fsz += 30;
+     po = strstr(fname,".sna");
+     if(po!=NULL){po[1]='S';po[2]='N';po[3]='A';}
    }
  }
- printf("Version to use: SHAFF%i\n",ver);
+ strcat(fname,"FF");
+ fo = fopen(fname,"wb");
+ if(fo==NULL)
+ {
+   if(f!=NULL) fclose(f);
+   printf("ERROR: Can't open file '%s' for writing\n",fname);
+   return -3;
+ }
+ printf("Version of format to use: SHAFF%i\n",ver);
  if(ver!=0 && ver!=1)
  {
    if(f!=NULL) fclose(f);
@@ -255,20 +243,32 @@ int main(int argc, char **argv)
    printf("ERROR: Invalid version number!\n");
    return -10;
  }
+ fprintf(fo,"SHAFF%i",ver);
+ fputc(0,fo);fputc(fsz,fo);
  if(lim<=0 && ver==0) lim=4;
  if(lim<=0 && ver==1) lim=2;
- printf("Minimal size to detect: %i\n",lim);
+ printf("Minimal length to detect: %i bytes\n",lim);
+ n = sz&BLOCKMS;
+ k = (sz/BLOCKSZ)+(n?1:0);
+ printf("Number of blocks to encode: %i\n",k);
+ fputc((k>>8)&255,fo);fputc(k&255,fo);
+ if(n==0) n=BLOCKSZ;
+ printf("Size of the last block: %i\n",n);
+ fputc((n>>8)&255,fo);fputc(n&255,fo);
+ if(f_sna)
+ {
+   fprintf(fo,"SNA");
+   fwrite(sna_header,1,27,fo);
+ }
  n = 0;
  while(pt < sz)
  {
    printf("\nBlock %i:\n",++n);
-   printf("Cleaning %i words...\n",COR16K);
-   memset(cor_table,0,sizeof(unsigned long)*COR16K);
-   printf("Cleaning Ok\n");
-   for(i=(f_test?sz:0);i<16384;i++) one_block[i]=-1;
+   memset(cor_table,0,sizeof(unsigned int)*COR16K);
+   for(i=(f_test?sz:0);i<BLOCKSZ;i++) one_block[i]=-1;
    k = sz - pt;
-   if(k>16384) k=16384;
-   printf("Reading %i bytes\n",k);
+   if(k>BLOCKSZ) k=BLOCKSZ;
+   printf("Reading %i bytes...\n",k);
    if(!f_test)
    {
      for(i=0;i<k;i++)
@@ -279,23 +279,24 @@ int main(int argc, char **argv)
    }
    else pt = sz;
    bsz = k;
-   printf("Analysis...\n");
+   printf("Autocorrelation...\n");
    for(k=1;k<bsz;k++)
    {
      o = k<<9;
-     for(i=0;i<16384;i+=32)
+     for(i=0;i<BLOCKSZ;i+=32)
      {
        m = 0;
        for(j=0;j<32;j++)
        {
          m <<= 1;
-         if(i+j+k < 16384 &&
+         if(i+j+k < BLOCKSZ &&
             one_block[i+j]>=0 && one_block[i+j+k]>=0 &&
             one_block[i+j]==one_block[i+j+k]) m |= 1;
        }
        cor_table[o++] = m;
      }
    }
+   printf("Greedy algorithm...\n");
    cur_copy = 0;
    while(1)
    {
@@ -351,8 +352,8 @@ int main(int argc, char **argv)
      }
      if(m<lim) break;
      p = m;
-     if((o&16383)+m > bsz) m = bsz-(o&16383);
-     e = (o&16383)+(o>>14);
+     if((o&BLOCKMS)+m > bsz) m = bsz-(o&BLOCKMS);
+     e = (o&BLOCKMS)+(o>>14);
      if(e < bsz)
      {
        copies[cur_copy].address = e;
@@ -360,7 +361,8 @@ int main(int argc, char **argv)
        copies[cur_copy].size = m;
 
 #ifdef DEBUG
-       printf("Matched address=#%4.4X size=%i offset=%i/#%4.4X\n",copies[cur_copy].address,copies[cur_copy].size,copies[cur_copy].offset,((int)copies[cur_copy].offset)&0xFFFF);
+       printf("Matched address=#%4.4X size=%i offset=%i/#%4.4X\n",
+              copies[cur_copy].address,copies[cur_copy].size,copies[cur_copy].offset,((int)copies[cur_copy].offset)&0xFFFF);
 #endif
        if(++cur_copy>=MAXCOPIES)
        {
@@ -374,7 +376,7 @@ int main(int argc, char **argv)
      for(p=0;p<bsz;p++)
      {
       k = m;
-      if((o&16383)+k > bsz) k=bsz-(o&16383);
+      if((o&BLOCKMS)+k > bsz) k=bsz-(o&BLOCKMS);
       if(!((k+(o&31))>>5))
       {
        j = (p<<9)|((o>>5)&511);
@@ -483,10 +485,10 @@ int main(int argc, char **argv)
        cor_table[j] = 0;
        k -= 32;
       }
-      if(!(o&16383)&&!m) break;
+      if(!(o&BLOCKMS)&&!m) break;
       else
       {
-        if(o&16383)
+        if(o&BLOCKMS)
              o--;
         else m--;
       }
@@ -506,9 +508,16 @@ int main(int argc, char **argv)
        if(one_block[j]<0 || one_block[j]>255) e++;
        one_block[j++] -= 256;
      }
-     if(e) printf("ERROR: %i collisions detected within range #%4.4X...#%4.4X\n",
-        e,copies[i].address,copies[i].address+copies[i].size-1);
+     if(e)
+     {
+       if(f!=NULL) fclose(f);
+       if(fo!=NULL) fclose(fo);
+       printf("ERROR: %i collisions detected within range #%4.4X...#%4.4X\n",
+             e,copies[i].address,copies[i].address+copies[i].size-1);
+       return -6;
+     }
    }
+   printf("Writing data to the file...\n");
    asz = 3; /* v0 byte counter */
    csz = 18; /* v1 bit counter */
    b = -1;
@@ -536,16 +545,22 @@ int main(int argc, char **argv)
          {
            if(o==d || o==dd || o==-1)
            {
-             if(o==d)
+             if(o==-1)
              {
 #ifdef DEBUG
-               printf("Use last distance %i/#%4.4X\n",o,o&0xFFFF);
+               printf("Use \"multiply\" distance %i/#%4.4X\n",o,o&0xFFFF);
 #endif
              }
-             if(o==dd)
+             else if(o==d)
              {
 #ifdef DEBUG
-               printf("Use previous last distance %i/#%4.4X\n",o,o&0xFFFF);
+               printf("Use 1st stored distance %i/#%4.4X\n",o,o&0xFFFF);
+#endif
+             }
+             else if(o==dd)
+             {
+#ifdef DEBUG
+               printf("Use 2nd stored distance %i/#%4.4X\n",o,o&0xFFFF);
 #endif
              }
              csz -= 12;
@@ -599,7 +614,7 @@ int main(int argc, char **argv)
    printf("Byte-stream compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
    printf("Bit-stream compression: %i%% (%i -> %i)\n",(csz>>3)*100/bsz,bsz,(csz>>3)+1);
    fsz += asz;
-   gsz += (csz>>3)+((csz&7)?1:0);
+//   gsz += (csz>>3)+((csz&7)?1:0);
  }
  if(!f_test)
  {
@@ -608,7 +623,7 @@ int main(int argc, char **argv)
  }
 
  printf("\nSHAFF0 compressed file size: %i bytes\n",fsz);
- printf("SHAFF1 compressed file size: %i bytes\n",gsz);
- printf("Good bye!\n\n");
+// printf("SHAFF1 compressed file size: %i bytes\n",gsz);
+ printf("\nGood bye!\n\n");
  return 0;
 }
