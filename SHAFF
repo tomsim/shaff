@@ -14,8 +14,8 @@ SHAFF0 data format:
 XX - any byte other than #FF is a single data byte
 #FF #00 - single byte #FF
 #FF 0xxxxxxx LENGTH (distance -1...-127)
-#FF 10xxxxxx LENGTH (distance -128...-191, but -191 means last distance longer or equal to -191)
-#FF 11xxxxxx xxxxxxxx LENGTH (directly encoded distance up to -16383)
+#FF 10xxxxxx LENGTH (distance -128...-190 and -191 means last distance longer or equal to -191)
+#FF 11xxxxxx xxxxxxxx LENGTH (directly encoded distance from -191 to -16383)
 special case without LENGTH:
 #FF #C0 #00 - end of block (instead of distance -16384)
 

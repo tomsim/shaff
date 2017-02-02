@@ -26,17 +26,24 @@
 #if 1
 #define DEBUG
 #endif
+#if 1
+#define DEBUG1
+#endif
 
 /* Code is written to be executed on 32-bit or 64-bit systems with 32-bit int */
 
-#define BLOCKSZ (16384)
-#define BLOCKMS (BLOCKSZ-1)
+#define BLOCKBZ 14
+#define BLOCKSZ 16384
+#define BLOCKMS 16383
+#define BLOCKMH 511
+#define BLOCKBH 9
 #define COR16K ((BLOCKSZ/32)*BLOCKSZ)
-#define MAXCOPIES BLOCKSZ
+#define MAXCOPIES 15000
 
 unsigned int cor_table[COR16K]; /* 8MB of globals */
 short one_block[BLOCKSZ]; /* State of every byte in current block */
 struct one_copy { short address, offset, size, oldval; } copies[MAXCOPIES];
+unsigned int literalstat[256];
 int cur_copy = 0;
 int ver = 0;
 int lim = 0;
@@ -64,6 +71,13 @@ unsigned char sna_header[27];
 
    Source: http://www.worldofspectrum.org/faq/reference/formats.htm
 */
+
+int decode(char* fname)
+{
+ printf("Decode file '%s'\n",fname);
+ 
+ return 0;
+}
 
 #define all_ones(u) ((u)==0xFFFFFFFF)
 
@@ -144,8 +158,8 @@ int right_ones(unsigned int u)
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
- int i,j,k,m,n,o,p,w,z,e,b,d,dd,sz,asz,bsz,csz,fsz,pt=0;
- unsigned long l=0;
+ int i,j,k,m,n,o,oo,p,w,z,e,b,d,dd,ll,sz,bsz,pt=0;
+ unsigned int l,curo,lcount,xcount;
  char *po,fname[100];
 
  printf("\nSHAFF v" VERSION " (C) 2013,2017 A.A.Shabarshin <me@shaos.net>\n\n");
@@ -182,7 +196,10 @@ int main(int argc, char **argv)
    fname[99] = 0;
    if(!strcmp(fname,"TEST")) f_test = 1;
  }
- fsz = 12;
+ if(f_decode)
+ {
+   return decode(fname);
+ }
  if(f_test)
  {
    sz = 0;
@@ -194,7 +211,7 @@ int main(int argc, char **argv)
    for(i=0;i<10;i++) one_block[sz++]='0'+i;
    for(i=0;i<60;i++) one_block[sz++]='a';
    for(i=0;i<6;i++) {one_block[sz++]='d';one_block[sz++]='e';}
-   for(i=0;i<30;i++) one_block[sz++]='f';
+   for(i=0;i<30;i++) one_block[sz++]=0xFF;
    f = fo = NULL;
  }
  else
@@ -220,9 +237,7 @@ int main(int argc, char **argv)
        return -2;
      }
      fread(sna_header,1,27,f);
-/*     pt = 27;  */
-     sz -= 27;
-     fsz += 30;
+     sz -= 27; /* pt is still 0 */
      po = strstr(fname,".sna");
      if(po!=NULL){po[1]='S';po[2]='N';po[3]='A';}
    }
@@ -244,7 +259,9 @@ int main(int argc, char **argv)
    return -10;
  }
  fprintf(fo,"SHAFF%i",ver);
- fputc(0,fo);fputc(fsz,fo);
+ fputc(0,fo);
+ if(!f_sna) fputc(12,fo);
+ else fputc(42,fo);
  if(lim<=0 && ver==0) lim=4;
  if(lim<=0 && ver==1) lim=2;
  printf("Minimal length to detect: %i bytes\n",lim);
@@ -266,6 +283,8 @@ int main(int argc, char **argv)
    printf("\nBlock %i:\n",++n);
    memset(cor_table,0,sizeof(unsigned int)*COR16K);
    for(i=(f_test?sz:0);i<BLOCKSZ;i++) one_block[i]=-1;
+   curo = ftell(fo);
+   printf("Current offset %u\n",curo);
    k = sz - pt;
    if(k>BLOCKSZ) k=BLOCKSZ;
    printf("Reading %i bytes...\n",k);
@@ -282,7 +301,7 @@ int main(int argc, char **argv)
    printf("Autocorrelation...\n");
    for(k=1;k<bsz;k++)
    {
-     o = k<<9;
+     o = k<<BLOCKBH;
      for(i=0;i<BLOCKSZ;i+=32)
      {
        m = 0;
@@ -300,9 +319,7 @@ int main(int argc, char **argv)
    cur_copy = 0;
    while(1)
    {
-     m = 0;
-     o = 0;
-     k = 0;
+     m = o = k = 0;
      j = -1;
      for(i=0;i<COR16K;i++)
      {
@@ -352,14 +369,14 @@ int main(int argc, char **argv)
      }
      if(m<lim) break;
      p = m;
-     if((o&BLOCKMS)+m > bsz) m = bsz-(o&BLOCKMS);
-     e = (o&BLOCKMS)+(o>>14);
+     oo = o&BLOCKMS;
+     if(oo+m > bsz) m=bsz-oo;
+     e = oo+(o>>BLOCKBZ);
      if(e < bsz)
      {
        copies[cur_copy].address = e;
-       copies[cur_copy].offset = -(o>>14);
+       copies[cur_copy].offset = -(o>>BLOCKBZ);
        copies[cur_copy].size = m;
-
 #ifdef DEBUG
        printf("Matched address=#%4.4X size=%i offset=%i/#%4.4X\n",
               copies[cur_copy].address,copies[cur_copy].size,copies[cur_copy].offset,((int)copies[cur_copy].offset)&0xFFFF);
@@ -376,10 +393,11 @@ int main(int argc, char **argv)
      for(p=0;p<bsz;p++)
      {
       k = m;
-      if((o&BLOCKMS)+k > bsz) k=bsz-(o&BLOCKMS);
+      oo = o&BLOCKMS;
+      if(oo+k > bsz) k=bsz-oo;
       if(!((k+(o&31))>>5))
       {
-       j = (p<<9)|((o>>5)&511);
+       j = (p<<BLOCKBH)|((o>>5)&BLOCKMH);
        i = o&31;
        l = 1<<(31-i);
        w = 0;
@@ -394,7 +412,7 @@ int main(int argc, char **argv)
       else for(i=0;i<=((m+(o&31))>>5);i++)
       {
        if(k==0) break;
-       j = ((p<<9)|((o>>5)&511))+i;
+       j = ((p<<BLOCKBH)|((o>>5)&BLOCKMH))+i;
        if(i==0)
        {
          switch(o&31)
@@ -485,7 +503,7 @@ int main(int argc, char **argv)
        cor_table[j] = 0;
        k -= 32;
       }
-      if(!(o&BLOCKMS)&&!m) break;
+      if(!(o&BLOCKMS) && !m) break;
       else
       {
         if(o&BLOCKMS)
@@ -518,28 +536,97 @@ int main(int argc, char **argv)
      }
    }
    printf("Writing data to the file...\n");
-   asz = 3; /* v0 byte counter */
-   csz = 18; /* v1 bit counter */
    b = -1;
    d = dd = 0;
+   xcount = lcount = 0;
+   memset(literalstat,0,sizeof(unsigned int)*256);
    for(i=0;i<bsz;i++)
    {
      if(one_block[i]>=0)
      {
-       if(one_block[i]>255)
+       if(one_block[i]>255) /* Copy */
        {
-         asz += 3;
-         csz += 18;
          j = one_block[i]-1000;
+         if(j<0 || j>=MAXCOPIES)
+         {
+            if(f!=NULL) fclose(f);
+            if(fo!=NULL) fclose(fo);
+            printf("ERROR: index %i out of range at #%4.4X\n",j,i);
+            return -7;
+         }
          o = copies[j].offset;
          k = copies[j].size;
-         if(k==2)
+         if(ver==0) /* SHAFF0 */
          {
-           asz--;
-         }
-         if(ver==0 && o < -190) /* SHAFF0 */
-         {
-           if(k>3) asz++;
+           e = 3; /* estimate size */
+           if(o < -190) e++;
+           if(k > 195) e++;
+           /* TODO: check for FFs */
+           if(e > k)
+           {
+#ifdef DEBUG
+             printf("Force literals instead of a copy (%i > %i)\n",e,k);
+#endif
+             for(e=0;e<k;e++)
+             {
+                if(e==0) ll = copies[j].oldval;
+                else ll = one_block[i+e];
+                if(ll<0 || ll>=256)
+                {
+                  if(f!=NULL) fclose(f);
+                  if(fo!=NULL) fclose(fo);
+                  printf("ERROR: forced literal %i out of range at #%4.4X\n",ll,i);
+                  return -8;
+                }
+#ifdef DEBUG1
+                printf("L 0x%2.2X %c <<<\n",ll,(ll>32)?ll:' ');
+#endif
+                lcount++;
+                literalstat[ll]++;
+                fputc(ll,fo);
+                if(ll==255) fputc(0,fo);
+             }
+           }
+           else
+           {
+#ifdef DEBUG1
+             printf("X 0x%4.4X (%i) %i\n",o&0xFFFF,o,k);
+#endif
+             xcount++;
+             fputc(0xFF,fo);
+             o = -o;
+             if(o==d)
+             {
+#ifdef DEBUG
+               printf("Use stored distance %i\n",o);
+#endif
+               fputc(0xBF,fo);
+             }
+             else if(o < 191)
+             {
+               fputc(o,fo);
+             }
+             else /* o >= 191 */
+             {
+               d = o; /* store distance for possible future use */
+               o = (-o) & 0xFFFF;
+               fputc(o>>8,fo);
+               fputc(o&255,fo);
+             }
+             if(k < 132)
+             {
+               fputc(k+124,fo);
+             }
+             else if(k < 196)
+             {
+               fputc(k-68,fo);
+             }
+             else
+             {
+               fputc(k>>8,fo);
+               fputc(k&255,fo);
+             }
+           }
          }
          else if(ver==1) /* SHAFF1 */
          {
@@ -563,18 +650,24 @@ int main(int argc, char **argv)
                printf("Use 2nd stored distance %i/#%4.4X\n",o,o&0xFFFF);
 #endif
              }
-             csz -= 12;
+//             csz -= 12;
            }
            else
            {
-             if(o >= -1345) csz -= 3;
-             if(o >= -321) csz -= 2;
-             if(o >= -65) csz -= 3;
+             if(o >= -1345)
+             {
+//               csz -= 3;
+             }
+             else if(o >= -321)
+             {
+//               csz -= 2;
+             }
+             else if(o >= -65)
+             {
+//               csz -= 3;
+             }
            }
-         }
-         if(k > 195)
-         {
-           asz++;
+           if(o!=dd && o!=-1){dd=d;d=o;}
          }
 /*
          k = m;
@@ -585,44 +678,77 @@ int main(int argc, char **argv)
 
          csz += copies[j].sizebits; ?????
 */
-         if(o!=dd&&o!=-1){dd=d;d=o;}
        }
-       else
+       else /* Literal */
        {
-         asz++;
-         if(one_block[i]==255)
+         if(ver==0) /* SHAFF0 */
          {
-           asz++;
-         }
-         if(one_block[i]==b)
-         {
-#ifdef DEBUG
-           printf("Use last byte #%2.2X\n",b);
+           ll = one_block[i];
+           if(ll<0 || ll>=256)
+           {
+              if(f!=NULL) fclose(f);
+              if(fo!=NULL) fclose(fo);
+              printf("ERROR: literal %i out of range at #%4.4X\n",ll,i);
+              return -9;
+           }
+#ifdef DEBUG1
+           printf("L 0x%2.2X %c\n",ll,(ll>32)?ll:' ');
 #endif
-           csz += 6;
+           lcount++;
+           literalstat[ll]++;
+           fputc(ll,fo);
+           if(ll==255) fputc(0,fo);
          }
-         else
+         else if(ver==1) /* SHAFF1 */
          {
-           if(one_block[i]&0x80)
-                csz += 9;
-           else csz += 8;
+           if(one_block[i]==b)
+           {
+#ifdef DEBUG
+             printf("Use last byte #%2.2X\n",b);
+#endif
+//           csz += 6;
+           }
+           else
+           {
+             if(one_block[i]&0x80)
+             {
+//                csz += 9;
+             }
+             else
+             {
+//                csz += 8;
+             }
+           }
+           b = one_block[i];
          }
-         b = one_block[i];
        }
      }
    }
-   printf("Byte-stream compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
-   printf("Bit-stream compression: %i%% (%i -> %i)\n",(csz>>3)*100/bsz,bsz,(csz>>3)+1);
-   fsz += asz;
+//   printf("Byte-stream compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
+//   printf("Bit-stream compression: %i%% (%i -> %i)\n",(csz>>3)*100/bsz,bsz,(csz>>3)+1);
+//   fsz += asz;
 //   gsz += (csz>>3)+((csz&7)?1:0);
+#ifdef DEBUG1
+   printf("X end of block\n");
+#endif
+   xcount++;
+   fputc(0xFF,fo);
+   fputc(0xC0,fo);
+   fputc(0x00,fo);
+   
+   printf("Number of copies = %u\n",xcount);
+   printf("Number of literals = %u\n",lcount);
+#ifdef DEBUG1
+   for(i=0;i<256;i++)
+   {
+      if(literalstat[i]) printf("[%i] 0x%2.2X %c = %i\n",i,i,(i>32)?i:' ',literalstat[i]);  
+   }
+#endif
  }
- if(!f_test)
- {
-   fclose(f);
-   fclose(fo);
- }
+ if(f!=NULL) fclose(f);
+ if(fo!=NULL) fclose(fo);
 
- printf("\nSHAFF0 compressed file size: %i bytes\n",fsz);
+// printf("\nSHAFF0 compressed file size: %i bytes\n",fsz);
 // printf("SHAFF1 compressed file size: %i bytes\n",gsz);
  printf("\nGood bye!\n\n");
  return 0;
