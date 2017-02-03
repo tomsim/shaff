@@ -49,6 +49,7 @@ int ver = 0;
 int lim = 0;
 int f_decode = 0;
 int f_blocks = 0;
+int f_stdout = 0;
 int f_test = 0;
 int f_sna = 0;
 unsigned char sna_header[27];
@@ -72,12 +73,7 @@ unsigned char sna_header[27];
    Source: http://www.worldofspectrum.org/faq/reference/formats.htm
 */
 
-int decode(char* fname)
-{
- printf("Decode file '%s'\n",fname);
- 
- return 0;
-}
+int decode(char* fname, int flags);
 
 #define all_ones(u) ((u)==0xFFFFFFFF)
 
@@ -162,19 +158,22 @@ int main(int argc, char **argv)
  unsigned int l,curo,lcount,xcount;
  char *po,fname[100];
 
- printf("\nSHAFF v" VERSION " (C) 2013,2017 A.A.Shabarshin <me@shaos.net>\n\n");
+ if(argc<2 || argv[1][0]!='-' || argv[1][1]!='c')
+    printf("\nSHAFF v" VERSION " (C) 2013,2017 A.A.Shabarshin <me@shaos.net>\n\n");
 
  if(!f_test)
  {
    if(argc<2)
    {
-     printf("\nUsage:\n\tshaff [options] filename\n\n");
-     printf("where options are\n");
-     printf("\t-0 to force SHAFF0 file format (by default)\n");
-     printf("\t-1 to force SHAFF1 file format\n");
+     printf("\nUsage:\n\tshaff [options] filename\n");
+     printf("\nEncoding options:\n");
+     printf("\t-0 to use SHAFF0 file format (by default)\n");
+     printf("\t-1 to use SHAFF1 file format\n");
      printf("\t-b to save blocks as separate files\n");
-     printf("\t-lN to limit length of matches (by default 2 for v1 and 4 for v0)\n");
-     printf("\t-d to decode SHAFF0 or SHAFF1 compressed file\n");
+     printf("\t-lN to limit length of matches (by default 2 for SHAFF1 and 4 for SHAFF0)\n");
+     printf("\nDecoding options:\n");
+     printf("\t-d to decode SHAFF0 or SHAFF1 compressed file to file\n");
+     printf("\t-c to decode SHAFF0 or SHAFF1 compressed file to screen\n");
      printf("\n");
      return 0;
    }
@@ -188,6 +187,7 @@ int main(int argc, char **argv)
          case '1': ver = 1; break;
          case 'd': f_decode = 1; break;
          case 'b': f_blocks = 1; break;
+         case 'c': f_stdout = 1; f_decode = 1; break;
          case 'l': lim = atoi(&argv[i][2]); break;
        }
      }
@@ -198,7 +198,7 @@ int main(int argc, char **argv)
  }
  if(f_decode)
  {
-   return decode(fname);
+   return decode(fname,f_stdout);
  }
  if(f_test)
  {
@@ -729,7 +729,7 @@ int main(int argc, char **argv)
 //   fsz += asz;
 //   gsz += (csz>>3)+((csz&7)?1:0);
 #ifdef DEBUG1
-   printf("X end of block\n");
+   printf("X end of block\n\n");
 #endif
    xcount++;
    fputc(0xFF,fo);
@@ -739,6 +739,7 @@ int main(int argc, char **argv)
    printf("Number of copies = %u\n",xcount);
    printf("Number of literals = %u\n",lcount);
 #ifdef DEBUG1
+   printf("\nStatistics for literals:\n");
    for(i=0;i<256;i++)
    {
       if(literalstat[i]) printf("[%i] 0x%2.2X %c = %i\n",i,i,(i>32)?i:' ',literalstat[i]);  
@@ -751,5 +752,167 @@ int main(int argc, char **argv)
 // printf("\nSHAFF0 compressed file size: %i bytes\n",fsz);
 // printf("SHAFF1 compressed file size: %i bytes\n",gsz);
  printf("\nGood bye!\n\n");
+ return 0;
+}
+
+int decode(char* fname, int flags)
+{
+ FILE *f,*fo;
+ char fnew[100];
+ static unsigned char buf[BLOCKSZ];
+ unsigned int u,filesize;
+ signed short offset,lastoffset;
+ int i,j,version,nblocks,lastsize,character,iblock,cursize,length,nerr=0;
+#ifdef DEBUG
+ printf("Decode file '%s' with flags 0x%2.2X\n",fname,flags);
+#endif
+ strcpy(fnew,"stdout");
+ f = fopen(fname,"rb");
+ if(f==NULL)
+ {
+   printf("ERROR: Can't open file '%s'\n",fname);
+   return -101;
+ }
+ fseek(f,0,SEEK_END);
+ filesize = ftell(f);
+ fseek(f,0,SEEK_SET);
+ if(fgetc(f)!='S') nerr++;
+ if(fgetc(f)!='H') nerr++;
+ if(fgetc(f)!='A') nerr++;
+ if(fgetc(f)!='F') nerr++;
+ if(fgetc(f)!='F') nerr++;
+ if(nerr)
+ {
+   fclose(f);
+   printf("ERROR: Ivalid file '%s'\n",fname);
+   return -102;
+ }
+ version = fgetc(f)-'0';
+ if(version<0 || version>1)
+ {
+   fclose(f);
+   printf("ERROR: Unsupported version %i\n",version);
+   return -103;
+ }
+ offset = fgetc(f)<<8;
+ offset |= fgetc(f);
+ nblocks = fgetc(f)<<8;
+ nblocks |= fgetc(f);
+ lastsize = fgetc(f)<<8;
+ lastsize |= fgetc(f);
+#ifdef DEBUG
+ printf("Output file: %s\n",fnew);
+ printf("Offset to data = %i\n",offset);
+ printf("Number of blocks = %i\n",nblocks);
+ printf("Size of last block = %i\n",lastsize);
+#endif
+ if(offset >= filesize)
+ {
+   printf("ERROR: File '%s' doesn't have data in it!\n");
+   return -104;
+ }
+ if(flags&1) fo = stdout;
+ else
+ {
+   strncpy(fnew,fname,99);
+   fnew[98] = 0;
+   u = strlen(fnew);
+   if(fnew[u-1]=='F' && fnew[u-2]=='F') fnew[u-2]=0;
+   else strcat(fnew,"_");
+   fo = fopen(fnew,"wb");
+ }
+ if(fo==NULL)
+ {
+   fclose(f);
+   printf("ERROR: Can't open file '%s'\n",fnew);
+   return -105;
+ }
+ if(offset > 15)
+ {
+   buf[0] = fgetc(f);
+   buf[1] = fgetc(f);
+   buf[2] = fgetc(f);
+   buf[3] = 0;
+   if(!strcmp(buf,"SNA"))
+   {
+     fread(buf,27,1,f);
+     fwrite(buf,27,1,fo);
+   }
+ }
+ fseek(f,offset,SEEK_SET);
+ for(iblock=1;iblock<=nblocks;iblock++)
+ {
+   if(iblock < nblocks)
+     cursize = BLOCKSZ;
+   else
+     cursize = lastsize;
+#ifdef DEBUG
+   printf("Block %i (%i)\n",iblock,cursize);
+#endif
+   if(version==0)
+   {
+     i = 0;
+     while(i<=cursize)
+     {
+       character = fgetc(f);
+       if(character==0xFF)
+       {
+         character = fgetc(f);
+         if(character==0) buf[i++] = 0xFF;
+         else
+         {
+           if((character&0xC0)==0xC0)
+           {
+              offset = (((short)character)<<8)|((short)fgetc(f));
+              lastoffset = offset;
+              if(offset==-16384)
+              {
+                 if(i!=cursize)
+                 {
+                    printf("ERROR: Something wrong with size (%i)...\n",i);
+                 }
+                 break;
+              }
+           }
+           else if(character==191)
+              offset = lastoffset;
+           else
+              offset = -character;
+           character = fgetc(f);
+           if((character&0xC0)==0)
+              length = (character<<8)|fgetc(f);
+           else if((character&0xC0)==64)
+              length = 132 + character - 64;
+           else
+              length = 4 + character - 128;
+           j = i + offset;
+           if(j < 0)
+           {
+              printf("ERROR: Something wrong with offset (%i)...\n",offset);
+           }
+           else
+           {
+              do
+              {
+                if(j>=cursize)
+                {
+                  printf("ERROR: Something wrong with size (%i)....\n",j);
+                }
+                else buf[i++] = buf[j++];
+              } while(--length);
+           }
+         }
+       }
+       else buf[i++] = character;
+     }
+   }
+   else if(version==1)
+   {
+     printf("ERROR: format SHAFF1 is not yet supported!\n");
+   }
+   fwrite(buf,cursize,1,fo);
+ }
+ if(!(flags&1)) fclose(fo);
+ fclose(f);
  return 0;
 }
