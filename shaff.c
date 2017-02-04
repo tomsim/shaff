@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define VERSION "1.0alpha"
 #if 1
@@ -137,10 +138,13 @@ int main(int argc, char **argv)
  FILE *f,*fo;
  int i,j,k,m,n,o,oo,p,w,z,e,b,d,dd,ll,sz,bsz,pt=0;
  unsigned int l,curo,lcount,xcount;
+ unsigned long t1,t2;
  char *po,fname[100];
 
  if(argc<2 || argv[1][0]!='-' || argv[1][1]!='c')
     printf("\nSHAFF v" VERSION " (C) 2013,2017 A.A.Shabarshin <me@shaos.net>\n\n");
+
+ t1 = time(NULL);
 
  if(!f_test)
  {
@@ -396,6 +400,9 @@ int main(int argc, char **argv)
        j = ((p<<BLOCKBH)|((o>>5)&BLOCKMH))+i;
        if(i==0)
        {
+#if 1
+         cor_table[j] &= 0xFFFFFFFF<<(32-(o&31));
+#else
          switch(o&31)
          {
            case 31: cor_table[j]&=0xFFFFFFFE; break;
@@ -431,11 +438,15 @@ int main(int argc, char **argv)
            case  1: cor_table[j]&=0x80000000; break;
            case  0: cor_table[j] = 0; break;
          }
+#endif
          k -= 32-(o&31);
          continue;
        }
        if(k < 32)
        {
+#if 1
+         cor_table[j] &= (1<<(32-k))-1;
+#else
          switch(k)
          {
            case  1: cor_table[j]&=0x7FFFFFFF; break;
@@ -470,6 +481,7 @@ int main(int argc, char **argv)
            case 30: cor_table[j]&=0x00000003; break;
            case 31: cor_table[j]&=0x00000001; break;
          }
+#endif
          k = 0;
          break;
        }
@@ -712,10 +724,12 @@ int main(int argc, char **argv)
    printf("X end of block\n\n");
 #endif
    xcount++;
-   fputc(0xFF,fo);
-   fputc(0xC0,fo);
-   fputc(0x00,fo);
-   
+   if(ver==0)
+   {
+     fputc(0xFF,fo);
+     fputc(0xC0,fo);
+     fputc(0x00,fo);
+   }
    printf("Number of copies = %u\n",xcount);
    printf("Number of literals = %u\n",lcount);
 #ifdef DEBUG1
@@ -726,12 +740,12 @@ int main(int argc, char **argv)
    }
 #endif
  }
+ l = ftell(fo);
+ printf("\nCompressed file size: %i bytes (%i%%)\n",l,l*100/ftell(f));
  if(f!=NULL) fclose(f);
  if(fo!=NULL) fclose(fo);
-
-// printf("\nSHAFF0 compressed file size: %i bytes\n",fsz);
-// printf("SHAFF1 compressed file size: %i bytes\n",gsz);
- printf("\nGood bye!\n\n");
+ t2 = time(NULL);
+ printf("Compressed in %i minutes\nGood bye!\n\n",(int)((t2-t1)/60));
  return 0;
 }
 
@@ -865,9 +879,9 @@ int decode(char* fname, int flags)
            if((character&0xC0)==0)
               length = (character<<8)|fgetc(f);
            else if((character&0xC0)==64)
-              length = 132 + character - 64;
+              length = character + 68; /* 132-64 */
            else
-              length = 4 + character - 128;
+              length = character - 124; /* 4-128 */
            j = i + offset;
            if(j < 0)
            {
