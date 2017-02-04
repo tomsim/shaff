@@ -54,25 +54,6 @@ int f_test = 0;
 int f_sna = 0;
 unsigned char sna_header[27];
 
-/* Description of SNA format from WorldOfSpectrum web-site:
-
-   Offset   Size   Description
-   ------------------------------------------------------------------------
-   0        1      byte   I
-   1        8      word   HL',DE',BC',AF'
-   9        10     word   HL,DE,BC,IY,IX
-   19       1      byte   Interrupt (bit 2 contains IFF2, 1=EI/0=DI)
-   20       1      byte   R
-   21       4      words  AF,SP
-   25       1      byte   IntMode (0=IM0/1=IM1/2=IM2)
-   26       1      byte   BorderColor (0..7, not used by Spectrum 1.7)
-   27       49152  bytes  RAM dump 16384..65535
-   ------------------------------------------------------------------------
-   Total: 49179 bytes
-
-   Source: http://www.worldofspectrum.org/faq/reference/formats.htm
-*/
-
 int decode(char* fname, int flags);
 
 #define all_ones(u) ((u)==0xFFFFFFFF)
@@ -455,9 +436,8 @@ int main(int argc, char **argv)
        }
        if(k < 32)
        {
-         switch(k&31)
+         switch(k)
          {
-           case  0: cor_table[j] = 0; break;
            case  1: cor_table[j]&=0x7FFFFFFF; break;
            case  2: cor_table[j]&=0x3FFFFFFF; break;
            case  3: cor_table[j]&=0x1FFFFFFF; break;
@@ -858,9 +838,11 @@ int decode(char* fname, int flags)
        if(character==0xFF)
        {
          character = fgetc(f);
-         if(character==0) buf[i++] = 0xFF;
-         else
+         if(character==0) /* Literal 0xFF */
+            buf[i++] = 0xFF;
+         else /* Reference */
          {
+           /* Decode offset */
            if((character&0xC0)==0xC0)
            {
               offset = (((short)character)<<8)|((short)fgetc(f));
@@ -878,6 +860,7 @@ int decode(char* fname, int flags)
               offset = lastoffset;
            else
               offset = -character;
+           /* Decode length */
            character = fgetc(f);
            if((character&0xC0)==0)
               length = (character<<8)|fgetc(f);
@@ -903,7 +886,8 @@ int decode(char* fname, int flags)
            }
          }
        }
-       else buf[i++] = character;
+       else /* Literal */ 
+          buf[i++] = character;
      }
    }
    else if(version==1)
