@@ -24,12 +24,9 @@
 #include <time.h>
 
 #define VERSION "1.0alpha"
-#if 1
+#define GLOBALSTAT
 #define DEBUG
-#endif
-#if 1
 #define DEBUG1
-#endif
 
 /* Code is written to be executed on 32-bit or 64-bit systems with 32-bit int */
 
@@ -44,7 +41,7 @@
 unsigned int cor_table[COR16K]; /* 8MB of globals */
 short one_block[BLOCKSZ]; /* State of every byte in current block */
 struct one_copy { short address, offset, size, oldval; } copies[MAXCOPIES];
-unsigned int literalstat[256];
+unsigned int literalstat[256]; /* Literal statistics */
 int cur_copy = 0;
 int ver = 0;
 int lim = 0;
@@ -205,7 +202,7 @@ int main(int argc, char **argv)
    f = fopen(fname,"rb");
    if(f==NULL)
    {
-     printf("ERROR: Can't open file '%s'\n",fname);
+     printf("\nERROR: Can't open file '%s'\n",fname);
      return -1;
    }
    if(strstr(fname,".sna")!=NULL || strstr(fname,".SNA")!=NULL) f_sna = 1;
@@ -218,7 +215,7 @@ int main(int argc, char **argv)
      if(sz!=49179)
      {
        if(f!=NULL) fclose(f);
-       printf("ERROR: Invalid SNA file '%s'\n",fname);
+       printf("\nERROR: Invalid SNA file '%s'\n",fname);
        return -2;
      }
      fread(sna_header,1,27,f);
@@ -232,7 +229,7 @@ int main(int argc, char **argv)
  if(fo==NULL)
  {
    if(f!=NULL) fclose(f);
-   printf("ERROR: Can't open file '%s' for writing\n",fname);
+   printf("\nERROR: Can't open file '%s' for writing\n",fname);
    return -3;
  }
  printf("Version of format to use: SHAFF%i\n",ver);
@@ -240,7 +237,7 @@ int main(int argc, char **argv)
  {
    if(f!=NULL) fclose(f);
    if(fo!=NULL) fclose(fo);
-   printf("ERROR: Invalid version number!\n");
+   printf("\nERROR: Invalid version number!\n");
    return -10;
  }
  fprintf(fo,"SHAFF%i",ver);
@@ -262,6 +259,9 @@ int main(int argc, char **argv)
    fprintf(fo,"SNA");
    fwrite(sna_header,1,27,fo);
  }
+#ifdef GLOBALSTAT
+ memset(literalstat,0,sizeof(unsigned int)*256);
+#endif
  n = 0;
  while(pt < sz)
  {
@@ -370,7 +370,7 @@ int main(int argc, char **argv)
        {
          if(f!=NULL) fclose(f);
          if(fo!=NULL) fclose(fo);
-         printf("ERROR: Too many elements...\n");
+         printf("\nERROR: Too many elements...\n");
          return -4;
        }
      }
@@ -445,6 +445,7 @@ int main(int argc, char **argv)
        if(k < 32)
        {
 #if 1
+         /* k is 1...31 at this point */
          cor_table[j] &= (1<<(32-k))-1;
 #else
          switch(k)
@@ -489,7 +490,7 @@ int main(int argc, char **argv)
        {
          if(f!=NULL) fclose(f);
          if(fo!=NULL) fclose(fo);
-         printf("ERROR: %i out of range (p=%i)\n",j,p);
+         printf("\nERROR: %i out of range (p=%i)\n",j,p);
          return -5;
        }
        cor_table[j] = 0;
@@ -522,7 +523,7 @@ int main(int argc, char **argv)
      {
        if(f!=NULL) fclose(f);
        if(fo!=NULL) fclose(fo);
-       printf("ERROR: %i collisions detected within range #%4.4X...#%4.4X\n",
+       printf("\nERROR: %i collisions detected within range #%4.4X...#%4.4X\n",
              e,copies[i].address,copies[i].address+copies[i].size-1);
        return -6;
      }
@@ -531,7 +532,9 @@ int main(int argc, char **argv)
    b = -1;
    d = dd = 0;
    xcount = lcount = 0;
+#ifndef GLOBALSTAT
    memset(literalstat,0,sizeof(unsigned int)*256);
+#endif
    for(i=0;i<bsz;i++)
    {
      if(one_block[i]>=0)
@@ -543,7 +546,7 @@ int main(int argc, char **argv)
          {
             if(f!=NULL) fclose(f);
             if(fo!=NULL) fclose(fo);
-            printf("ERROR: index %i out of range at #%4.4X\n",j,i);
+            printf("\nERROR: index %i out of range at #%4.4X\n",j,i);
             return -7;
          }
          o = copies[j].offset;
@@ -567,7 +570,7 @@ int main(int argc, char **argv)
                 {
                   if(f!=NULL) fclose(f);
                   if(fo!=NULL) fclose(fo);
-                  printf("ERROR: forced literal %i out of range at #%4.4X\n",ll,i);
+                  printf("\nERROR: forced literal %i out of range at #%4.4X\n",ll,i);
                   return -8;
                 }
 #ifdef DEBUG1
@@ -680,7 +683,7 @@ int main(int argc, char **argv)
            {
               if(f!=NULL) fclose(f);
               if(fo!=NULL) fclose(fo);
-              printf("ERROR: literal %i out of range at #%4.4X\n",ll,i);
+              printf("\nERROR: literal %i out of range at #%4.4X\n",ll,i);
               return -9;
            }
 #ifdef DEBUG1
@@ -730,22 +733,54 @@ int main(int argc, char **argv)
      fputc(0xC0,fo);
      fputc(0x00,fo);
    }
-   printf("Number of copies = %u\n",xcount);
+   printf("Number of references = %u\n",xcount);
    printf("Number of literals = %u\n",lcount);
+   oo = ftell(fo) - curo;
+   printf("Compression: %i%% (%i -> %i)\n",oo*100/bsz,bsz,oo);
+#ifdef GLOBALSTAT
+   if(pt==sz) /* last block */
+   {
+#endif
 #ifdef DEBUG1
    printf("\nStatistics for literals:\n");
+#endif
+   oo = 2000000;
    for(i=0;i<256;i++)
    {
+#ifdef DEBUG1
       if(literalstat[i]) printf("[%i] 0x%2.2X %c = %i\n",i,i,(i>32)?i:' ',literalstat[i]);  
-   }
 #endif
+      if(literalstat[i] < oo) oo = literalstat[i];
+   }
+   printf("Rarest bytes:");
+   ll = 3;
+   k = 255;
+   for(i=255;i>=0;i--)
+   {
+      if(literalstat[i]==oo)
+      {
+         if(k==255) k=i;
+         printf(" %2.2X",i);
+         if(!(--ll)) break;
+      }
+   }
+   printf("\n");
+   if(ver==0)
+   {
+      if(literalstat[255]!=oo)
+         printf("You may get %i bytes less (%i%%) if set rarest byte as a prefix (option -x%2.2X)\n",
+             literalstat[255]-oo,100*(literalstat[255]-oo)/ftell(fo),k);
+   }
  }
+#ifdef GLOBALSTAT
+ }
+#endif
  l = ftell(fo);
  printf("\nCompressed file size: %i bytes (%i%%)\n",l,l*100/ftell(f));
  if(f!=NULL) fclose(f);
  if(fo!=NULL) fclose(fo);
  t2 = time(NULL);
- printf("Compressed in %i minutes\nGood bye!\n\n",(int)((t2-t1)/60));
+ printf("Working time: %im%is\nGood bye!\n\n",(int)((t2-t1)/60),(int)((t2-t1)%60));
  return 0;
 }
 
@@ -764,7 +799,7 @@ int decode(char* fname, int flags)
  f = fopen(fname,"rb");
  if(f==NULL)
  {
-   printf("ERROR: Can't open file '%s'\n",fname);
+   printf("\nERROR: Can't open file '%s'\n",fname);
    return -101;
  }
  fseek(f,0,SEEK_END);
@@ -778,14 +813,14 @@ int decode(char* fname, int flags)
  if(nerr)
  {
    fclose(f);
-   printf("ERROR: Ivalid file '%s'\n",fname);
+   printf("\nERROR: Ivalid file '%s'\n",fname);
    return -102;
  }
  version = fgetc(f)-'0';
  if(version<0 || version>1)
  {
    fclose(f);
-   printf("ERROR: Unsupported version %i\n",version);
+   printf("\nERROR: Unsupported version %i\n",version);
    return -103;
  }
  offset = fgetc(f)<<8;
@@ -795,14 +830,13 @@ int decode(char* fname, int flags)
  lastsize = fgetc(f)<<8;
  lastsize |= fgetc(f);
 #ifdef DEBUG
- printf("Output file: %s\n",fnew);
  printf("Offset to data = %i\n",offset);
  printf("Number of blocks = %i\n",nblocks);
  printf("Size of last block = %i\n",lastsize);
 #endif
  if(offset >= filesize)
  {
-   printf("ERROR: File '%s' doesn't have data in it!\n");
+   printf("\nERROR: File '%s' doesn't have data in it!\n");
    return -104;
  }
  if(flags&1) fo = stdout;
@@ -818,9 +852,12 @@ int decode(char* fname, int flags)
  if(fo==NULL)
  {
    fclose(f);
-   printf("ERROR: Can't open file '%s'\n",fnew);
+   printf("\nERROR: Can't open file '%s'\n",fnew);
    return -105;
  }
+#ifdef DEBUG
+ printf("Output file: %s\n",fnew);
+#endif
  if(offset > 15)
  {
    buf[0] = fgetc(f);
@@ -863,9 +900,10 @@ int decode(char* fname, int flags)
               lastoffset = offset;
               if(offset==-16384)
               {
+                 /* Marker of the block end */
                  if(i!=cursize)
                  {
-                    printf("ERROR: Something wrong with size (%i)...\n",i);
+                    printf("\nERROR: Something wrong with size (%i)...\n",i);
                  }
                  break;
               }
@@ -885,7 +923,7 @@ int decode(char* fname, int flags)
            j = i + offset;
            if(j < 0)
            {
-              printf("ERROR: Something wrong with offset (%i)...\n",offset);
+              printf("\nERROR: Something wrong with offset (%i)...\n",offset);
            }
            else
            {
@@ -893,7 +931,7 @@ int decode(char* fname, int flags)
               {
                 if(j>=cursize)
                 {
-                  printf("ERROR: Something wrong with size (%i)....\n",j);
+                  printf("\nERROR: Something wrong with size (%i)....\n",j);
                 }
                 else buf[i++] = buf[j++];
               } while(--length);
@@ -906,7 +944,7 @@ int decode(char* fname, int flags)
    }
    else if(version==1)
    {
-     printf("ERROR: format SHAFF1 is not yet supported!\n");
+     printf("\nERROR: format SHAFF1 is not yet supported!\n");
    }
    fwrite(buf,cursize,1,fo);
  }
