@@ -45,6 +45,7 @@ unsigned int literalstat[256]; /* Literal statistics */
 int cur_copy = 0;
 int ver = 0;
 int lim = 0;
+int xbyte = 255;
 int f_decode = 0;
 int f_blocks = 0;
 int f_stdout = 0;
@@ -741,18 +742,25 @@ int main(int argc, char **argv)
    if(pt==sz) /* last block */
    {
 #endif
-#ifdef DEBUG1
+#ifdef DEBUG
    printf("\nStatistics for literals:\n");
 #endif
    oo = 2000000;
+   w = z = 0;
    for(i=0;i<256;i++)
    {
-#ifdef DEBUG1
-      if(literalstat[i]) printf("[%i] 0x%2.2X %c = %i\n",i,i,(i>32)?i:' ',literalstat[i]);  
+#ifdef DEBUG
+#ifndef DEBUG1
+      if(literalstat[i])
+#endif
+         printf("[%03d] 0x%2.2X %c = %i\n",i,i,(i>32)?i:' ',literalstat[i]);  
 #endif
       if(literalstat[i] < oo) oo = literalstat[i];
+      if(i < 128)
+           w+=literalstat[i];
+      else z+=literalstat[i];
    }
-   printf("Rarest bytes:");
+   printf("Literal balance: %i vs %i\nRarest literals:",w,z);
    ll = 3;
    k = 255;
    for(i=255;i>=0;i--)
@@ -767,9 +775,15 @@ int main(int argc, char **argv)
    printf("\n");
    if(ver==0)
    {
-      if(literalstat[255]!=oo)
+      if(literalstat[xbyte]!=oo)
          printf("You may get %i bytes less (%i%%) if set rarest byte as a prefix (option -x%2.2X)\n",
-             literalstat[255]-oo,100*(literalstat[255]-oo)/ftell(fo),k);
+             literalstat[xbyte]-oo,100*(literalstat[xbyte]-oo)/ftell(fo),k);
+   }
+/*   if(ver==1)  */
+   {
+      if(z > w)
+         printf("You may get %i bytes less (%i%%) if set inversion for literals (option -i)\n",
+             (z-w)>>3,100*(z-w)/8/ftell(fo));
    }
  }
 #ifdef GLOBALSTAT
