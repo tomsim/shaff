@@ -1,20 +1,27 @@
 SHAFF header:
 
-Bytes 0...5 - signature and version ("SHAFF0" or "SHAFF1")
+Bytes 0...5 - signature and version ("SHAFF0", "SHAFF1" or "SHAFF2")
 Bytes 6,7 - offset to the 1st block of encoded data (big-endian)
 Bytes 8,9 - number of 16K blocks (big-endian)
 Bytes 10,11 - size of the last block (less or equal to 16384, also big-endian)
 Then optional uncompressed auxilary data, for example in case of SNA-file:
 Bytes 12...14 "SNA" - signature to identify SNA header
 Bytes 15...41 - SNA 27-byte header itself
+Optional Huffman table after "HUF" for SHAFF2:
+ #FF N - start section with codes with length N (1...254)
+ XX ... - code for byte XX (Huffman code starts with most significant bit)
+ #FF #00 ... - code for byte #FF
+ #FF #FF - end of HUF header
+Then sequence of encoded 16KB blocks in chosen format:
 
 
 SHAFF0 data format:
 
+1st byte defines prefix byte (#FF by default) that is mentioned as #FF below
 XX - any byte other than #FF is a single data byte
 #FF #00 - single byte #FF
-#FF 0xxxxxxx LENGTH (distance -1...-127)
-#FF 10xxxxxx LENGTH (distance -128...-190 and -191 means last distance longer or equal to -191)
+#FF 0xxxxxxx LENGTH (distance 1...127)
+#FF 10xxxxxx LENGTH (distance 128...190 and 191 means last distance longer or equal to -191)
 #FF 11xxxxxx xxxxxxxx LENGTH (directly encoded distance from -191 to -16383)
 special case without LENGTH:
 #FF #C0 #00 - end of block (instead of distance -16384)
@@ -27,6 +34,7 @@ LENGTH is 1 or 2 bytes:
 
 SHAFF1 data format:
 
+1st bit specifies if single bytes are inverted (1) or not (0 - default value)
 0xxxxxxx - single byte #00...#7F
 10xxxxxxx - single byte #80...#FF
 110000 - repeat last single byte (no LENGTH after that)
@@ -56,3 +64,10 @@ LENGTH is a sequence of 2...26 bits that encode length of the copy:
 111111111110xxxxxxxxxxxx - for 4096...8191 (000000000000...111111111111)
 1111111111110xxxxxxxxxxxxx - for 8192...16383 (0000000000000...1111111111111)
 
+
+SHAFF2 data format (FUTURE):
+
+00... \
+01... - Huffman codes
+10... /
+11... - Reference that encoded the same way as in SHAFF1 above

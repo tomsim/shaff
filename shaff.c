@@ -23,7 +23,7 @@
 #include <string.h>
 #include <time.h>
 
-#define VERSION "1.0alpha"
+#define VERSION "1.0beta"
 #define GLOBALSTAT
 #define DEBUG
 #define DEBUG1
@@ -49,6 +49,7 @@ int xbyte = 255;
 int f_decode = 0;
 int f_blocks = 0;
 int f_stdout = 0;
+int f_invert = 0;
 int f_test = 0;
 int f_sna = 0;
 unsigned char sna_header[27];
@@ -153,7 +154,9 @@ int main(int argc, char **argv)
      printf("\t-0 to use SHAFF0 file format (by default)\n");
      printf("\t-1 to use SHAFF1 file format\n");
      printf("\t-b to save blocks as separate files\n");
-     printf("\t-lN to limit length of matches (by default 2 for SHAFF1 and 4 for SHAFF0)\n");
+     printf("\t-lN to limit length of matches (default value is 4 for SHAFF0 and 2 for SHAFF1)\n");
+     printf("\t-xHH to set prefix byte other than FF (applicable only to SHAFF0)\n");
+     printf("\t-i to invert literals in output bitstream (applicable only to SHAFF1)\n");
      printf("\nDecoding options:\n");
      printf("\t-d to decode SHAFF0 or SHAFF1 compressed file to file\n");
      printf("\t-c to decode SHAFF0 or SHAFF1 compressed file to screen\n");
@@ -170,8 +173,10 @@ int main(int argc, char **argv)
          case '1': ver = 1; break;
          case 'd': f_decode = 1; break;
          case 'b': f_blocks = 1; break;
+         case 'i': f_invert = 1; break;
          case 'c': f_stdout = 1; f_decode = 1; break;
          case 'l': lim = atoi(&argv[i][2]); break;
+         case 'x': xbyte = strtol(&argv[i][2],NULL,16); break;
        }
      }
      else strncpy(fname,argv[i],100);
@@ -199,7 +204,7 @@ int main(int argc, char **argv)
  }
  else
  {
-   printf("Opening file '%s'\n",fname);
+   printf("Opening input file '%s'\n",fname);
    f = fopen(fname,"rb");
    if(f==NULL)
    {
@@ -226,6 +231,7 @@ int main(int argc, char **argv)
    }
  }
  strcat(fname,"FF");
+ printf("Opening output file '%s'\n",fname);
  fo = fopen(fname,"wb");
  if(fo==NULL)
  {
@@ -245,9 +251,16 @@ int main(int argc, char **argv)
  fputc(0,fo);
  if(!f_sna) fputc(12,fo);
  else fputc(42,fo);
- if(lim<=0 && ver==0) lim=4;
- if(lim<=0 && ver==1) lim=2;
+ if(!lim)
+ {
+    if(ver==0)
+         lim = 4;
+    else lim = 2;
+ }
  printf("Minimal length to detect: %i bytes\n",lim);
+ if(xbyte<0 || xbyte>255) xbyte = 255;
+ if(ver==0) printf("Prefix byte for references: 0x%2.2X\n",xbyte);
+ if(ver==1 && f_invert) printf("Iversion for literals is set\n");
  n = sz&BLOCKMS;
  k = (sz/BLOCKSZ)+(n?1:0);
  printf("Number of blocks to encode: %i\n",k);
@@ -401,89 +414,14 @@ int main(int argc, char **argv)
        j = ((p<<BLOCKBH)|((o>>5)&BLOCKMH))+i;
        if(i==0)
        {
-#if 1
          cor_table[j] &= 0xFFFFFFFF<<(32-(o&31));
-#else
-         switch(o&31)
-         {
-           case 31: cor_table[j]&=0xFFFFFFFE; break;
-           case 30: cor_table[j]&=0xFFFFFFFC; break;
-           case 29: cor_table[j]&=0xFFFFFFF8; break;
-           case 28: cor_table[j]&=0xFFFFFFF0; break;
-           case 27: cor_table[j]&=0xFFFFFFE0; break;
-           case 26: cor_table[j]&=0xFFFFFFC0; break;
-           case 25: cor_table[j]&=0xFFFFFF80; break;
-           case 24: cor_table[j]&=0xFFFFFF00; break;
-           case 23: cor_table[j]&=0xFFFFFE00; break;
-           case 22: cor_table[j]&=0xFFFFFC00; break;
-           case 21: cor_table[j]&=0xFFFFF800; break;
-           case 20: cor_table[j]&=0xFFFFF000; break;
-           case 19: cor_table[j]&=0xFFFFE000; break;
-           case 18: cor_table[j]&=0xFFFFC000; break;
-           case 17: cor_table[j]&=0xFFFF8000; break;
-           case 16: cor_table[j]&=0xFFFF0000; break;
-           case 15: cor_table[j]&=0xFFFE0000; break;
-           case 14: cor_table[j]&=0xFFFC0000; break;
-           case 13: cor_table[j]&=0xFFF80000; break;
-           case 12: cor_table[j]&=0xFFF00000; break;
-           case 11: cor_table[j]&=0xFFE00000; break;
-           case 10: cor_table[j]&=0xFFC00000; break;
-           case  9: cor_table[j]&=0xFF800000; break;
-           case  8: cor_table[j]&=0xFF000000; break;
-           case  7: cor_table[j]&=0xFE000000; break;
-           case  6: cor_table[j]&=0xFC000000; break;
-           case  5: cor_table[j]&=0xF8000000; break;
-           case  4: cor_table[j]&=0xF0000000; break;
-           case  3: cor_table[j]&=0xE0000000; break;
-           case  2: cor_table[j]&=0xC0000000; break;
-           case  1: cor_table[j]&=0x80000000; break;
-           case  0: cor_table[j] = 0; break;
-         }
-#endif
          k -= 32-(o&31);
          continue;
        }
        if(k < 32)
        {
-#if 1
          /* k is 1...31 at this point */
          cor_table[j] &= (1<<(32-k))-1;
-#else
-         switch(k)
-         {
-           case  1: cor_table[j]&=0x7FFFFFFF; break;
-           case  2: cor_table[j]&=0x3FFFFFFF; break;
-           case  3: cor_table[j]&=0x1FFFFFFF; break;
-           case  4: cor_table[j]&=0x0FFFFFFF; break;
-           case  5: cor_table[j]&=0x07FFFFFF; break;
-           case  6: cor_table[j]&=0x03FFFFFF; break;
-           case  7: cor_table[j]&=0x01FFFFFF; break;
-           case  8: cor_table[j]&=0x00FFFFFF; break;
-           case  9: cor_table[j]&=0x007FFFFF; break;
-           case 10: cor_table[j]&=0x003FFFFF; break;
-           case 11: cor_table[j]&=0x001FFFFF; break;
-           case 12: cor_table[j]&=0x000FFFFF; break;
-           case 13: cor_table[j]&=0x0007FFFF; break;
-           case 14: cor_table[j]&=0x0003FFFF; break;
-           case 15: cor_table[j]&=0x0001FFFF; break;
-           case 16: cor_table[j]&=0x0000FFFF; break;
-           case 17: cor_table[j]&=0x00007FFF; break;
-           case 18: cor_table[j]&=0x00003FFF; break;
-           case 19: cor_table[j]&=0x00001FFF; break;
-           case 20: cor_table[j]&=0x00000FFF; break;
-           case 21: cor_table[j]&=0x000007FF; break;
-           case 22: cor_table[j]&=0x000003FF; break;
-           case 23: cor_table[j]&=0x000001FF; break;
-           case 24: cor_table[j]&=0x000000FF; break;
-           case 25: cor_table[j]&=0x0000007F; break;
-           case 26: cor_table[j]&=0x0000003F; break;
-           case 27: cor_table[j]&=0x0000001F; break;
-           case 28: cor_table[j]&=0x0000000F; break;
-           case 29: cor_table[j]&=0x00000007; break;
-           case 30: cor_table[j]&=0x00000003; break;
-           case 31: cor_table[j]&=0x00000001; break;
-         }
-#endif
          k = 0;
          break;
        }
@@ -536,11 +474,15 @@ int main(int argc, char **argv)
 #ifndef GLOBALSTAT
    memset(literalstat,0,sizeof(unsigned int)*256);
 #endif
+   fputc(xbyte,fo); /* Prefix byte */
+#ifdef DEBUG1
+   printf("X prefix %2.2X\n",xbyte);
+#endif
    for(i=0;i<bsz;i++)
    {
      if(one_block[i]>=0)
      {
-       if(one_block[i]>255) /* Copy */
+       if(one_block[i]>255) /* Reference */
        {
          j = one_block[i]-1000;
          if(j<0 || j>=MAXCOPIES)
@@ -554,33 +496,27 @@ int main(int argc, char **argv)
          k = copies[j].size;
          if(ver==0) /* SHAFF0 */
          {
-           e = 3; /* estimate size */
+           e = 3 - k; /* Estimate effectiveness of compression */
            if(o < -190) e++;
            if(k > 195) e++;
-           /* TODO: check for FFs */
-           if(e > k)
+           if(copies[j].oldval==xbyte) e--;
+           for(ll=i+1;ll<i+k;ll++)
            {
-#ifdef DEBUG
-             printf("Force literals instead of a copy (%i > %i)\n",e,k);
-#endif
+             if((one_block[ll]&255)==xbyte) e--;
+           }
+           if(e >= 0)
+           {
              for(e=0;e<k;e++)
              {
                 if(e==0) ll = copies[j].oldval;
-                else ll = one_block[i+e];
-                if(ll<0 || ll>=256)
-                {
-                  if(f!=NULL) fclose(f);
-                  if(fo!=NULL) fclose(fo);
-                  printf("\nERROR: forced literal %i out of range at #%4.4X\n",ll,i);
-                  return -8;
-                }
+                else ll = one_block[i+e]&255;
 #ifdef DEBUG1
-                printf("L 0x%2.2X %c <<<\n",ll,(ll>32)?ll:' ');
+                printf("L 0x%2.2X %c <<< #%4.4X [%i]\n",ll,(ll>32)?ll:' ',i,e);
 #endif
                 lcount++;
                 literalstat[ll]++;
                 fputc(ll,fo);
-                if(ll==255) fputc(0,fo);
+                if(ll==xbyte) fputc(0,fo);
              }
            }
            else
@@ -589,7 +525,7 @@ int main(int argc, char **argv)
              printf("X 0x%4.4X (%i) %i\n",o&0xFFFF,o,k);
 #endif
              xcount++;
-             fputc(0xFF,fo);
+             fputc(xbyte,fo);
              o = -o;
              if(o==d)
              {
@@ -693,7 +629,7 @@ int main(int argc, char **argv)
            lcount++;
            literalstat[ll]++;
            fputc(ll,fo);
-           if(ll==255) fputc(0,fo);
+           if(ll==xbyte) fputc(0,fo);
          }
          else if(ver==1) /* SHAFF1 */
          {
@@ -730,7 +666,7 @@ int main(int argc, char **argv)
    xcount++;
    if(ver==0)
    {
-     fputc(0xFF,fo);
+     fputc(xbyte,fo);
      fputc(0xC0,fo);
      fputc(0x00,fo);
    }
@@ -805,7 +741,7 @@ int decode(char* fname, int flags)
  static unsigned char buf[BLOCKSZ];
  unsigned int u,filesize;
  signed short offset,lastoffset;
- int i,j,version,nblocks,lastsize,character,iblock,cursize,length,nerr=0;
+ int i,j,version,nblocks,lastsize,character,iblock,cursize,length,xff,nerr=0;
 #ifdef DEBUG
  printf("Decode file '%s' with flags 0x%2.2X\n",fname,flags);
 #endif
@@ -896,15 +832,16 @@ int decode(char* fname, int flags)
 #endif
    if(version==0)
    {
+     xff = fgetc(f); /* Read byte that should be used as a prefix */
      i = 0;
      while(i<=cursize)
      {
        character = fgetc(f);
-       if(character==0xFF)
+       if(character==xff)
        {
          character = fgetc(f);
-         if(character==0) /* Literal 0xFF */
-            buf[i++] = 0xFF;
+         if(character==0) /* Literal 0xFF (or other prefix if set) */
+            buf[i++] = xff;
          else /* Reference */
          {
            /* Decode offset */
