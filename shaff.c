@@ -244,12 +244,13 @@ int main(int argc, char **argv)
    {
      m = o = k = 0;
      j = -1;
+     /* check for overlapping sequences */
      for(i=0;i<COR16K;i++)
      {
+       ui = cor_table[i];
        if(j<0)
        {
-         if(!cor_table[i]) continue;
-         ui = cor_table[i];
+         if(!ui) continue;
          for(k=0;k<32;k++)
          {
            if(!(ui&0x00000001)) break;
@@ -258,16 +259,15 @@ int main(int argc, char **argv)
          j = (i<<5)+32-k;
          continue;
        }
-       if(cor_table[i]==0xFFFFFFFF)
+       if(ui==0xFFFFFFFF)
        {
          k += 32;
          continue;
        }
-       ui = cor_table[i];
        for(w=0;w<32;w++)
        {
-          if(!(ui&0x80000000)) break;
-          ui <<= 1;
+         if(!(ui&0x80000000)) break;
+         ui <<= 1;
        }
        k += w;
        if(k > m)
@@ -278,9 +278,10 @@ int main(int argc, char **argv)
        j = -1;
        i--;
      }
-     w = 0;
-     for(i=0;i<COR16K;i++)
+     /* check for internal sequences if overlapping m<32 */
+     if(m<32) for(i=0;i<COR16K;i++)
      {
+       if(!cor_table[i] || cor_table[i]==0xFFFFFFFF) continue;
        k = 0;
        for(j=31;j>=0;j--)
        {
@@ -296,13 +297,11 @@ int main(int argc, char **argv)
            if(p) o=(i<<5)+32-k;
            else o=(i<<5)+31-j-k;
            m = k;
-           w++;
          }
          k = 0;
        }
      }
      if(m<lim) break;
-     p = m;
      oo = o&BLOCKMS;
      if(oo+m > bsz) m=bsz-oo;
      e = oo+(o>>BLOCKBZ);
@@ -661,7 +660,8 @@ int main(int argc, char **argv)
  }
 #endif
  l = ftell(fo);
- printf("\nCompressed file size: %i bytes (%i%%)\n",l,l*100/ftell(f));
+ if(f!=NULL)
+    printf("\nCompressed file size: %i bytes (%i%%)\n",l,l*100/ftell(f));
  if(f!=NULL) fclose(f);
  if(fo!=NULL) fclose(fo);
  t2 = time(NULL);
