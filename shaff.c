@@ -56,10 +56,17 @@ unsigned char sna_header[27];
 
 int decode(char* fname, int flags);
 
-#define all_ones(u) ((u)==0xFFFFFFFF)
-
 int left_ones(unsigned int u)
 {
+#if 1
+ register int i;
+ for(i=0;i<32;i++)
+ {
+   if(!(u&0x80000000)) break;
+   u<<=1;
+ }
+ return i;
+#else
  if((u&0x80000000)!=0x80000000) return 0;
  if((u&0xC0000000)!=0xC0000000) return 1;
  if((u&0xE0000000)!=0xE0000000) return 2;
@@ -93,10 +100,20 @@ int left_ones(unsigned int u)
  if((u&0xFFFFFFFE)!=0xFFFFFFFE) return 30;
  if((u&0xFFFFFFFF)!=0xFFFFFFFF) return 31;
  return 32;
+#endif
 }
 
 int right_ones(unsigned int u)
 {
+#if 1
+ register int i;
+ for(i=0;i<32;i++)
+ {
+   if(!(u&1)) break;
+   u>>=1;
+ }
+ return i;
+#else
  if((u&0x00000001)!=0x00000001) return 0;
  if((u&0x00000003)!=0x00000003) return 1;
  if((u&0x00000007)!=0x00000007) return 2;
@@ -129,6 +146,7 @@ int right_ones(unsigned int u)
  if((u&0x3FFFFFFF)!=0x3FFFFFFF) return 29;
  if((u&0x7FFFFFFF)!=0x7FFFFFFF) return 30;
  if((u&0xFFFFFFFF)!=0xFFFFFFFF) return 31;
+#endif
  return 32;
 }
 
@@ -329,7 +347,7 @@ int main(int argc, char **argv)
          j = (i<<5)+32-k;
          continue;
        }
-       if(all_ones(cor_table[i]))
+       if(cor_table[i]==0xFFFFFFFF)
        {
          k += 32;
          continue;
