@@ -56,105 +56,11 @@ unsigned char sna_header[27];
 
 int decode(char* fname, int flags);
 
-int left_ones(unsigned int u)
-{
-#if 1
- register int i;
- for(i=0;i<32;i++)
- {
-   if(!(u&0x80000000)) break;
-   u<<=1;
- }
- return i;
-#else
- if((u&0x80000000)!=0x80000000) return 0;
- if((u&0xC0000000)!=0xC0000000) return 1;
- if((u&0xE0000000)!=0xE0000000) return 2;
- if((u&0xF0000000)!=0xF0000000) return 3;
- if((u&0xF8000000)!=0xF8000000) return 4;
- if((u&0xFC000000)!=0xFC000000) return 5;
- if((u&0xFE000000)!=0xFE000000) return 6;
- if((u&0xFF000000)!=0xFF000000) return 7;
- if((u&0xFF800000)!=0xFF800000) return 8;
- if((u&0xFFC00000)!=0xFFC00000) return 9;
- if((u&0xFFE00000)!=0xFFE00000) return 10;
- if((u&0xFFF00000)!=0xFFF00000) return 11;
- if((u&0xFFF80000)!=0xFFF80000) return 12;
- if((u&0xFFFC0000)!=0xFFFC0000) return 13;
- if((u&0xFFFE0000)!=0xFFFE0000) return 14;
- if((u&0xFFFF0000)!=0xFFFF0000) return 15;
- if((u&0xFFFF8000)!=0xFFFF8000) return 16;
- if((u&0xFFFFC000)!=0xFFFFC000) return 17;
- if((u&0xFFFFE000)!=0xFFFFE000) return 18;
- if((u&0xFFFFF000)!=0xFFFFF000) return 19;
- if((u&0xFFFFF800)!=0xFFFFF800) return 20;
- if((u&0xFFFFFC00)!=0xFFFFFC00) return 21;
- if((u&0xFFFFFE00)!=0xFFFFFE00) return 22;
- if((u&0xFFFFFF00)!=0xFFFFFF00) return 23;
- if((u&0xFFFFFF80)!=0xFFFFFF80) return 24;
- if((u&0xFFFFFFC0)!=0xFFFFFFC0) return 25;
- if((u&0xFFFFFFE0)!=0xFFFFFFE0) return 26;
- if((u&0xFFFFFFF0)!=0xFFFFFFF0) return 27;
- if((u&0xFFFFFFF8)!=0xFFFFFFF8) return 28;
- if((u&0xFFFFFFFC)!=0xFFFFFFFC) return 29;
- if((u&0xFFFFFFFE)!=0xFFFFFFFE) return 30;
- if((u&0xFFFFFFFF)!=0xFFFFFFFF) return 31;
- return 32;
-#endif
-}
-
-int right_ones(unsigned int u)
-{
-#if 1
- register int i;
- for(i=0;i<32;i++)
- {
-   if(!(u&1)) break;
-   u>>=1;
- }
- return i;
-#else
- if((u&0x00000001)!=0x00000001) return 0;
- if((u&0x00000003)!=0x00000003) return 1;
- if((u&0x00000007)!=0x00000007) return 2;
- if((u&0x0000000F)!=0x0000000F) return 3;
- if((u&0x0000001F)!=0x0000001F) return 4;
- if((u&0x0000003F)!=0x0000003F) return 5;
- if((u&0x0000007F)!=0x0000007F) return 6;
- if((u&0x000000FF)!=0x000000FF) return 7;
- if((u&0x000001FF)!=0x000001FF) return 8;
- if((u&0x000003FF)!=0x000003FF) return 9;
- if((u&0x000007FF)!=0x000007FF) return 10;
- if((u&0x00000FFF)!=0x00000FFF) return 11;
- if((u&0x00001FFF)!=0x00001FFF) return 12;
- if((u&0x00003FFF)!=0x00003FFF) return 13;
- if((u&0x00007FFF)!=0x00007FFF) return 14;
- if((u&0x0000FFFF)!=0x0000FFFF) return 15;
- if((u&0x0001FFFF)!=0x0001FFFF) return 16;
- if((u&0x0003FFFF)!=0x0003FFFF) return 17;
- if((u&0x0007FFFf)!=0x0007FFFF) return 18;
- if((u&0x000FFFFF)!=0x000FFFFF) return 19;
- if((u&0x001FFFFF)!=0x001FFFFF) return 20;
- if((u&0x003FFFFF)!=0x003FFFFF) return 21;
- if((u&0x007FFFFF)!=0x007FFFFF) return 22;
- if((u&0x00FFFFFF)!=0x00FFFFFF) return 23;
- if((u&0x01FFFFFF)!=0x01FFFFFF) return 24;
- if((u&0x03FFFFFF)!=0x03FFFFFF) return 25;
- if((u&0x07FFFFFF)!=0x07FFFFFF) return 26;
- if((u&0x0FFFFFFF)!=0x0FFFFFFF) return 27;
- if((u&0x1FFFFFFF)!=0x1FFFFFFF) return 28;
- if((u&0x3FFFFFFF)!=0x3FFFFFFF) return 29;
- if((u&0x7FFFFFFF)!=0x7FFFFFFF) return 30;
- if((u&0xFFFFFFFF)!=0xFFFFFFFF) return 31;
-#endif
- return 32;
-}
-
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
  int i,j,k,m,n,o,oo,p,w,z,e,b,d,dd,ll,sz,bsz,pt=0;
- unsigned int l,curo,lcount,xcount;
+ unsigned int l,curo,lcount,xcount,ui;
  unsigned long t1,t2;
  char *po,fname[100];
 
@@ -343,7 +249,12 @@ int main(int argc, char **argv)
        if(j<0)
        {
          if(!cor_table[i]) continue;
-         k = right_ones(cor_table[i]);
+         ui = cor_table[i];
+         for(k=0;k<32;k++)
+         {
+           if(!(ui&0x00000001)) break;
+           ui >>= 1;
+         }
          j = (i<<5)+32-k;
          continue;
        }
@@ -352,7 +263,13 @@ int main(int argc, char **argv)
          k += 32;
          continue;
        }
-       k += left_ones(cor_table[i]);
+       ui = cor_table[i];
+       for(w=0;w<32;w++)
+       {
+          if(!(ui&0x80000000)) break;
+          ui <<= 1;
+       }
+       k += w;
        if(k > m)
        {
          m = k;
