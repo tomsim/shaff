@@ -26,7 +26,9 @@
 #define VERSION "1.0beta"
 #define GLOBALSTAT
 #define DEBUG
+/*
 #define DEBUG1
+*/
 
 /* Code is written to be executed on 32-bit or 64-bit systems with 32-bit int */
 
@@ -281,15 +283,16 @@ int main(int argc, char **argv)
      /* check for internal sequences if overlapping m<32 */
      if(m<32) for(i=0;i<COR16K;i++)
      {
-       if(!cor_table[i] || cor_table[i]==0xFFFFFFFF) continue;
+       ui = cor_table[i];
+       if(ui==0x00000000 || ui==0xFFFFFFFF) continue;
        k = 0;
-       for(j=31;j>=0;j--)
+       for(j=31;j>=0;j--,ui<<=1)
        {
          p = 0;
-         if(cor_table[i]&(1<<j))
+         if(ui&0x80000000)
          {
            k++;
-           if(j!=0) continue;
+           if(j) continue;
            p = 1;
          }
          if(k>m)
@@ -313,6 +316,8 @@ int main(int argc, char **argv)
 #ifdef DEBUG
        printf("Matched address=#%4.4X size=%i offset=%i/#%4.4X\n",
               copies[cur_copy].address,copies[cur_copy].size,copies[cur_copy].offset,((int)copies[cur_copy].offset)&0xFFFF);
+#else
+       printf("%i ",copies[cur_copy].size);fflush(stdout);
 #endif
        if(++cur_copy>=MAXCOPIES)
        {
@@ -348,7 +353,8 @@ int main(int argc, char **argv)
        j = ((p<<BLOCKBH)|((o>>5)&BLOCKMH))+i;
        if(i==0)
        {
-         cor_table[j] &= 0xFFFFFFFF<<(32-(o&31));
+         if(!(o&31)) cor_table[j] = 0;
+         else cor_table[j] &= 0xFFFFFFFF<<(32-(o&31));
          k -= 32-(o&31);
          continue;
        }
@@ -630,7 +636,7 @@ int main(int argc, char **argv)
            w+=literalstat[i];
       else z+=literalstat[i];
    }
-   printf("Literal balance: %i vs %i\nRarest literals:",w,z);
+   printf("\nLiteral balance: %i vs %i\nRarest literals:",w,z);
    ll = 3;
    k = 255;
    for(i=255;i>=0;i--)
@@ -665,7 +671,7 @@ int main(int argc, char **argv)
  if(f!=NULL) fclose(f);
  if(fo!=NULL) fclose(fo);
  t2 = time(NULL);
- printf("Working time: %im%is\nGood bye!\n\n",(int)((t2-t1)/60),(int)((t2-t1)%60));
+ printf("Working time: %dm%02ds\nGood bye!\n\n",(int)((t2-t1)/60),(int)((t2-t1)%60));
  return 0;
 }
 
