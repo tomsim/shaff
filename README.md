@@ -6,6 +6,8 @@ with simple public domain decoders written in Assembler and
 
 **Format SHAFF0 - DONE**
 
-**Format SHAFF1 - STILL IN PROGRESS**
+**Format SHAFF1 - DONE**
+
+**Format SHAFF2 - NOT YET IMPLEMENTED**
 
 (c) 2013,2017 A.A.Shabarshin me@shaos.net

@@ -23,10 +23,10 @@
 #include <string.h>
 #include <time.h>
 
-#define VERSION "1.0beta"
+#define VERSION "1.0"
 #define GLOBALSTAT
-#define DEBUG
 /*
+#define DEBUG
 #define DEBUG1
 */
 
@@ -51,17 +51,20 @@ int xbyte = 255;
 int f_decode = 0;
 int f_blocks = 0;
 int f_stdout = 0;
-int f_invert = 0;
 int f_test = 0;
 int f_sna = 0;
 unsigned char sna_header[27];
 
-int decode(char* fname, int flags);
+int decode(char* fname, int flags); /* decode the file */
+int fgetbit(FILE *f, int x); /* x!=0 to fast forward to the next byte */
+int fputbit(FILE *f, int b); /* -1 if you need to flush the byte */
+int fputbitlen(FILE *f, int l); /* write length */
+int fgetbitlen(FILE *f); /* read length */
 
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
- int i,j,k,m,n,o,oo,p,w,z,e,b,d,dd,ll,sz,bsz,pt=0;
+ int i,j,k,m,n,o,oo,p,w,z,e,b,d,dd,ll,kk,sz,bsz,pt=0;
  unsigned int l,curo,lcount,xcount,ui;
  unsigned long t1,t2;
  char *po,fname[100];
@@ -82,7 +85,6 @@ int main(int argc, char **argv)
      printf("\t-b to save blocks as separate files\n");
      printf("\t-lN to limit length of matches (default value is 4 for SHAFF0 and 2 for SHAFF1)\n");
      printf("\t-xHH to set prefix byte other than FF (applicable only to SHAFF0)\n");
-     printf("\t-i to invert literals in output bitstream (applicable only to SHAFF1)\n");
      printf("\nDecoding options:\n");
      printf("\t-d to decode SHAFF0 or SHAFF1 compressed file to file\n");
      printf("\t-c to decode SHAFF0 or SHAFF1 compressed file to screen\n");
@@ -99,7 +101,6 @@ int main(int argc, char **argv)
          case '1': ver = 1; break;
          case 'd': f_decode = 1; break;
          case 'b': f_blocks = 1; break;
-         case 'i': f_invert = 1; break;
          case 'c': f_stdout = 1; f_decode = 1; break;
          case 'l': lim = atoi(&argv[i][2]); break;
          case 'x': xbyte = strtol(&argv[i][2],NULL,16); break;
@@ -186,7 +187,6 @@ int main(int argc, char **argv)
  printf("Minimal length to detect: %i bytes\n",lim);
  if(xbyte<0 || xbyte>255) xbyte = 255;
  if(ver==0) printf("Prefix byte for references: 0x%2.2X\n",xbyte);
- if(ver==1 && f_invert) printf("Iversion for literals is set\n");
  n = sz&BLOCKMS;
  k = (sz/BLOCKSZ)+(n?1:0);
  printf("Number of blocks to encode: %i\n",k);
@@ -414,10 +414,13 @@ int main(int argc, char **argv)
 #ifndef GLOBALSTAT
    memset(literalstat,0,sizeof(unsigned int)*256);
 #endif
-   fputc(xbyte,fo); /* Prefix byte */
+   if(ver==0)
+   {
+      fputc(xbyte,fo); /* Prefix byte */
 #ifdef DEBUG1
-   printf("X prefix %2.2X\n",xbyte);
+      printf("X prefix %2.2X\n",xbyte);
 #endif
+   }
    for(i=0;i<bsz;i++)
    {
      if(one_block[i]>=0)
@@ -444,7 +447,7 @@ int main(int argc, char **argv)
            {
              if((one_block[ll]&255)==xbyte) e--;
            }
-           if(e >= 0)
+           if(e >= 0) /* Force literals */
            {
              for(e=0;e<k;e++)
              {
@@ -502,54 +505,191 @@ int main(int argc, char **argv)
          }
          else if(ver==1) /* SHAFF1 */
          {
+           kk = k; /* Estimate effectiveness of compression */
+           w = -1;
+           while(kk){kk>>=1;w++;}
+           e = 6 + w + w;
+           for(kk=0;kk<k;kk++)
+           {
+            if(kk==0) w = copies[j].oldval;
+            else w = one_block[i+kk]&255;
+            if(w&0x80) e-=9;
+            else e-=8;
+           }
+           ll = 0;
            if(o==d || o==dd || o==-1)
            {
+            if(e > 0) ll = e;
+            else
+            {
+             fputbit(fo,1);
+             fputbit(fo,1);
+             fputbit(fo,0);
+             fputbit(fo,0);
              if(o==-1)
              {
 #ifdef DEBUG
                printf("Use \"multiply\" distance %i/#%4.4X\n",o,o&0xFFFF);
 #endif
+               fputbit(fo,1);
+               fputbit(fo,1);
+               fputbitlen(fo,k);
              }
              else if(o==d)
              {
 #ifdef DEBUG
                printf("Use 1st stored distance %i/#%4.4X\n",o,o&0xFFFF);
 #endif
+               fputbit(fo,0);
+               fputbit(fo,1);
+               fputbitlen(fo,k);
              }
              else if(o==dd)
              {
 #ifdef DEBUG
                printf("Use 2nd stored distance %i/#%4.4X\n",o,o&0xFFFF);
 #endif
+               fputbit(fo,1);
+               fputbit(fo,0);
+               fputbitlen(fo,k);
              }
-//             csz -= 12;
+            }
            }
            else
            {
-             if(o >= -1345)
+             if(o >= -65)
              {
-//               csz -= 3;
+                e += 4;
+                if(e > 0) ll = e;
+                else
+                {
+                   fputbit(fo,1);
+                   fputbit(fo,1);
+                   fputbit(fo,0);
+                   fputbit(fo,1);
+                   w = -o-2;
+                   fputbit(fo,w&0x20);
+                   fputbit(fo,w&0x10);
+                   fputbit(fo,w&0x08);
+                   fputbit(fo,w&0x04);
+                   fputbit(fo,w&0x02);
+                   fputbit(fo,w&0x01);
+                   fputbitlen(fo,k);
+                }
              }
              else if(o >= -321)
              {
-//               csz -= 2;
+                e += 7;
+                if(e > 0) ll = e;
+                else
+                {
+                   fputbit(fo,1);
+                   fputbit(fo,1);
+                   fputbit(fo,1);
+                   fputbit(fo,0);
+                   fputbit(fo,0);
+                   w = -o-66;
+                   fputbit(fo,w&0x80);
+                   fputbit(fo,w&0x40);
+                   fputbit(fo,w&0x20);
+                   fputbit(fo,w&0x10);
+                   fputbit(fo,w&0x08);
+                   fputbit(fo,w&0x04);
+                   fputbit(fo,w&0x02);
+                   fputbit(fo,w&0x01);
+                   fputbitlen(fo,k);
+                }
              }
-             else if(o >= -65)
+             else if(o >= -1345)
              {
-//               csz -= 3;
+                e += 9;
+                if(e > 0) ll = e;
+                else
+                {
+                   fputbit(fo,1);
+                   fputbit(fo,1);
+                   fputbit(fo,1);
+                   fputbit(fo,0);
+                   fputbit(fo,1);
+                   w = -o-322;
+                   fputbit(fo,w&0x200);
+                   fputbit(fo,w&0x100);
+                   fputbit(fo,w&0x080);
+                   fputbit(fo,w&0x040);
+                   fputbit(fo,w&0x020);
+                   fputbit(fo,w&0x010);
+                   fputbit(fo,w&0x008);
+                   fputbit(fo,w&0x004);
+                   fputbit(fo,w&0x002);
+                   fputbit(fo,w&0x001);
+                   fputbitlen(fo,k);
+                }
+             }
+             else
+             {
+                e += 12;
+                if(e > 0) ll = e;
+                else
+                {
+                   fputbit(fo,1);
+                   fputbit(fo,1);
+                   w = o&0xFFFF;
+                   fputbit(fo,w&0x8000);
+                   fputbit(fo,w&0x4000);
+                   fputbit(fo,w&0x2000);
+                   fputbit(fo,w&0x1000);
+                   fputbit(fo,w&0x0800);
+                   fputbit(fo,w&0x0400);
+                   fputbit(fo,w&0x0200);
+                   fputbit(fo,w&0x0100);
+                   fputbit(fo,w&0x0080);
+                   fputbit(fo,w&0x0040);
+                   fputbit(fo,w&0x0020);
+                   fputbit(fo,w&0x0010);
+                   fputbit(fo,w&0x0008);
+                   fputbit(fo,w&0x0004);
+                   fputbit(fo,w&0x0002);
+                   fputbit(fo,w&0x0001);
+                   fputbitlen(fo,k);
+                }
              }
            }
-           if(o!=dd && o!=-1){dd=d;d=o;}
+           if(!ll) /* Reference was good */
+           {
+             if(o!=d && o!=-1){dd=d;d=o;}
+             xcount++;
+#ifdef DEBUG1
+             printf("X 0x%4.4X (%i) %i\n",o&0xFFFF,o,k);
+#endif
+           }
+           else /* Force literals */
+           {
+            for(e=0;e<k;e++)
+            {
+             if(e==0) w = copies[j].oldval;
+             else w = one_block[i+e]&255;
+             b = w;
+             lcount++;
+             literalstat[w]++;
+#ifdef DEBUG1
+             printf("L 0x%2.2X %c <<< #%4.4X [%i] e=%i\n",w,(w>32)?w:' ',i,e,ll);
+#endif
+             if(w&0x80)
+             {
+                fputbit(fo,1);
+                fputbit(fo,0);
+             }
+             else fputbit(fo,0);
+             fputbit(fo,w&0x40);
+             fputbit(fo,w&0x20);
+             fputbit(fo,w&0x10);
+             fputbit(fo,w&0x08);
+             fputbit(fo,w&0x04);
+             fputbit(fo,w&0x02);
+             fputbit(fo,w&0x01);
+            }
+           }
          }
-/*
-         k = m;
-         o = -1;
-         while(k){k>>=1;o++;}
-         isz += o+o;
-         copies[cur_copy].sizebits = o+o;
-
-         csz += copies[j].sizebits; ?????
-*/
        }
        else /* Literal */
        {
@@ -578,37 +718,58 @@ int main(int argc, char **argv)
 #ifdef DEBUG
              printf("Use last byte #%2.2X\n",b);
 #endif
-//           csz += 6;
+             xcount++;
+             fputbit(fo,1);
+             fputbit(fo,1);
+             fputbit(fo,0);
+             fputbit(fo,0);
+             fputbit(fo,0);
+#ifdef DEBUG1
+             printf("X last byte 0x%2.2X %c\n",b,(b>32)?b:' ');
+#endif
+             fputbit(fo,0);
            }
            else
            {
-             if(one_block[i]&0x80)
+             lcount++;
+             b = w = one_block[i];
+             literalstat[w]++;
+#ifdef DEBUG1
+             printf("L 0x%2.2X %c\n",w,(w>32)?w:' ');
+#endif
+             if(w&0x80)
              {
-//                csz += 9;
+                fputbit(fo,1);
+                fputbit(fo,0);
              }
-             else
-             {
-//                csz += 8;
-             }
+             else fputbit(fo,0);
+             fputbit(fo,w&0x40);
+             fputbit(fo,w&0x20);
+             fputbit(fo,w&0x10);
+             fputbit(fo,w&0x08);
+             fputbit(fo,w&0x04);
+             fputbit(fo,w&0x02);
+             fputbit(fo,w&0x01);
            }
-           b = one_block[i];
          }
        }
      }
    }
-//   printf("Byte-stream compression: %i%% (%i -> %i)\n",asz*100/bsz,bsz,asz);
-//   printf("Bit-stream compression: %i%% (%i -> %i)\n",(csz>>3)*100/bsz,bsz,(csz>>3)+1);
-//   fsz += asz;
-//   gsz += (csz>>3)+((csz&7)?1:0);
 #ifdef DEBUG1
    printf("X end of block\n\n");
 #endif
    xcount++;
-   if(ver==0)
+   if(ver==0) /* SHAFF0 */
    {
      fputc(xbyte,fo);
      fputc(0xC0,fo);
      fputc(0x00,fo);
+   }
+   if(ver==1) /* SHAFF1 */
+   {
+     for(ll=0;ll<4;ll++) fputbit(fo,1);
+     for(ll=0;ll<14;ll++) fputbit(fo,0);
+     fputbit(fo,-1); /* force to write */
    }
    printf("Number of references = %u\n",xcount);
    printf("Number of literals = %u\n",lcount);
@@ -629,7 +790,7 @@ int main(int argc, char **argv)
 #ifndef DEBUG1
       if(literalstat[i])
 #endif
-         printf("[%03d] 0x%2.2X %c = %i\n",i,i,(i>32)?i:' ',literalstat[i]);  
+         printf("[%03d] 0x%2.2X %c = %i\n",i,i,(i>32)?i:' ',literalstat[i]);
 #endif
       if(literalstat[i] < oo) oo = literalstat[i];
       if(i < 128)
@@ -655,12 +816,6 @@ int main(int argc, char **argv)
          printf("You may get %i bytes less (%i%%) if set rarest byte as a prefix (option -x%2.2X)\n",
              literalstat[xbyte]-oo,100*(literalstat[xbyte]-oo)/ftell(fo),k);
    }
-/*   if(ver==1)  */
-   {
-      if(z > w)
-         printf("You may get %i bytes less (%i%%) if set inversion for literals (option -i)\n",
-             (z-w)>>3,100*(z-w)/8/ftell(fo));
-   }
  }
 #ifdef GLOBALSTAT
  }
@@ -675,16 +830,313 @@ int main(int argc, char **argv)
  return 0;
 }
 
+int fputbit(FILE *f, int b)
+{
+ static int buf = 0;
+ static int shi = 0x80;
+ int flush = 0;
+ if(b < 0) flush=1;
+ else
+ {
+    if(b) buf|=shi;
+    shi >>= 1;
+    if(!shi) flush=1;
+ }
+ if(flush)
+ {
+    fputc(buf,f);
+    buf = 0;
+    shi = 0x80;
+    return 1;
+ }
+ return 0;
+}
+
+int fputbitlen(FILE *f, int l)
+{
+ if(l<4)
+ {
+   l-=2;
+   fputbit(f,0);
+   fputbit(f,l);
+ }
+ else if(l<8)
+ {
+   l-=4;
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&2);
+   fputbit(f,l&1);
+ }
+ else if(l<16)
+ {
+   l-=8;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&4);
+   fputbit(f,l&2);
+   fputbit(f,l&1);
+ }
+ else if(l<32)
+ {
+   l-=16;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&8);
+   fputbit(f,l&4);
+   fputbit(f,l&2);
+   fputbit(f,l&1);
+ }
+ else if(l<64)
+ {
+   l-=32;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x10);
+   fputbit(f,l&0x08);
+   fputbit(f,l&0x04);
+   fputbit(f,l&0x02);
+   fputbit(f,l&0x01);
+ }
+ else if(l<128)
+ {
+   l-=64;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x20);
+   fputbit(f,l&0x10);
+   fputbit(f,l&0x08);
+   fputbit(f,l&0x04);
+   fputbit(f,l&0x02);
+   fputbit(f,l&0x01);
+ }
+ else if(l<256)
+ {
+   l-=128;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x40);
+   fputbit(f,l&0x20);
+   fputbit(f,l&0x10);
+   fputbit(f,l&0x08);
+   fputbit(f,l&0x04);
+   fputbit(f,l&0x02);
+   fputbit(f,l&0x01);
+ }
+ else if(l<512)
+ {
+   l-=256;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x80);
+   fputbit(f,l&0x40);
+   fputbit(f,l&0x20);
+   fputbit(f,l&0x10);
+   fputbit(f,l&0x08);
+   fputbit(f,l&0x04);
+   fputbit(f,l&0x02);
+   fputbit(f,l&0x01);
+ }
+ else if(l<1024)
+ {
+   l-=512;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x100);
+   fputbit(f,l&0x080);
+   fputbit(f,l&0x040);
+   fputbit(f,l&0x020);
+   fputbit(f,l&0x010);
+   fputbit(f,l&0x008);
+   fputbit(f,l&0x004);
+   fputbit(f,l&0x002);
+   fputbit(f,l&0x001);
+ }
+ else if(l<2048)
+ {
+   l-=1024;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x200);
+   fputbit(f,l&0x100);
+   fputbit(f,l&0x080);
+   fputbit(f,l&0x040);
+   fputbit(f,l&0x020);
+   fputbit(f,l&0x010);
+   fputbit(f,l&0x008);
+   fputbit(f,l&0x004);
+   fputbit(f,l&0x002);
+   fputbit(f,l&0x001);
+ }
+ else if(l<4096)
+ {
+   l-=2048;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x400);
+   fputbit(f,l&0x200);
+   fputbit(f,l&0x100);
+   fputbit(f,l&0x080);
+   fputbit(f,l&0x040);
+   fputbit(f,l&0x020);
+   fputbit(f,l&0x010);
+   fputbit(f,l&0x008);
+   fputbit(f,l&0x004);
+   fputbit(f,l&0x002);
+   fputbit(f,l&0x001);
+ }
+ else if(l<8192)
+ {
+   l-=4096;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x800);
+   fputbit(f,l&0x400);
+   fputbit(f,l&0x200);
+   fputbit(f,l&0x100);
+   fputbit(f,l&0x080);
+   fputbit(f,l&0x040);
+   fputbit(f,l&0x020);
+   fputbit(f,l&0x010);
+   fputbit(f,l&0x008);
+   fputbit(f,l&0x004);
+   fputbit(f,l&0x002);
+   fputbit(f,l&0x001);
+ }
+ else if(l<16384)
+ {
+   l-=8192;
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,1);
+   fputbit(f,0);
+   fputbit(f,l&0x1000);
+   fputbit(f,l&0x0800);
+   fputbit(f,l&0x0400);
+   fputbit(f,l&0x0200);
+   fputbit(f,l&0x0100);
+   fputbit(f,l&0x0080);
+   fputbit(f,l&0x0040);
+   fputbit(f,l&0x0020);
+   fputbit(f,l&0x0010);
+   fputbit(f,l&0x0008);
+   fputbit(f,l&0x0004);
+   fputbit(f,l&0x0002);
+   fputbit(f,l&0x0001);
+ }
+ else
+ {
+   printf("\nERROR: Length %i is too long\n",l);
+   return 0;
+ }
+ return 1;
+}
+
+int fgetbit(FILE *f, int x)
+{
+ static int buf = 0;
+ static int shi = 1;
+ if(shi==1 || x)
+ {
+    buf = fgetc(f);
+    shi = 0x80;
+ }
+ else shi >>= 1;
+ return (buf&shi)?1:0;
+}
+
+int fgetbitlen(FILE *f)
+{
+ int lbase = 2;
+ int nbit = 1;
+ int len = 0;
+ while(fgetbit(f,0))
+ {
+   lbase<<=1;
+   nbit++;
+ }
+ while(nbit--)
+ {
+   len |= fgetbit(f,0);
+   len <<= 1;
+ }
+ return lbase+(len>>1);
+}
+
 int decode(char* fname, int flags)
 {
  FILE *f,*fo;
  char fnew[100];
  static unsigned char buf[BLOCKSZ];
- unsigned int u,filesize;
- signed short offset,lastoffset;
+ unsigned int u,filesize,bitbuf;
+ signed short offset,lastoffset,lastoffset2;
  int i,j,version,nblocks,lastsize,character,iblock,cursize,length,xff,nerr=0;
 #ifdef DEBUG
- printf("Decode file '%s' with flags 0x%2.2X\n",fname,flags);
+ printf("Decode file '%s' with flags %i\n",fname,flags);
 #endif
  strcpy(fnew,"stdout");
  f = fopen(fname,"rb");
@@ -721,6 +1173,7 @@ int decode(char* fname, int flags)
  lastsize = fgetc(f)<<8;
  lastsize |= fgetc(f);
 #ifdef DEBUG
+ printf("Compression method = %i\n",version);
  printf("Offset to data = %i\n",offset);
  printf("Number of blocks = %i\n",nblocks);
  printf("Size of last block = %i\n",lastsize);
@@ -830,13 +1283,171 @@ int decode(char* fname, int flags)
            }
          }
        }
-       else /* Literal */ 
+       else /* Literal */
           buf[i++] = character;
      }
    }
    else if(version==1)
    {
-     printf("\nERROR: format SHAFF1 is not yet supported!\n");
+     i = 0;
+     length = character = 0;
+     lastoffset = lastoffset2 = 0;
+     bitbuf = fgetbit(f,-1)<<1; /* Force to start from the new byte */
+     while(i<=cursize)
+     {
+       bitbuf |= fgetbit(f,0);
+       switch(bitbuf)
+       {
+         case 0: /* 00xxxxxx */
+         case 1: /* 01xxxxxx */
+            /* Literal <0x80 */
+            bitbuf <<= 6;
+            bitbuf |= fgetbit(f,0)<<5;
+            bitbuf |= fgetbit(f,0)<<4;
+            bitbuf |= fgetbit(f,0)<<3;
+            bitbuf |= fgetbit(f,0)<<2;
+            bitbuf |= fgetbit(f,0)<<1;
+            bitbuf |= fgetbit(f,0);
+            character = buf[i++] = bitbuf;
+            break;
+         case 2: /* 10xxxxxxx */
+            /* Literal >=0x80 */
+            bitbuf = 0x80;
+            bitbuf |= fgetbit(f,0)<<6;
+            bitbuf |= fgetbit(f,0)<<5;
+            bitbuf |= fgetbit(f,0)<<4;
+            bitbuf |= fgetbit(f,0)<<3;
+            bitbuf |= fgetbit(f,0)<<2;
+            bitbuf |= fgetbit(f,0)<<1;
+            bitbuf |= fgetbit(f,0);
+            character = buf[i++] = bitbuf;
+            break;
+         case 3: /* 11... - Reference */
+            length = 0;
+            bitbuf = fgetbit(f,0)<<3;
+            bitbuf |= fgetbit(f,0)<<2;
+            bitbuf |= fgetbit(f,0)<<1;
+            bitbuf |= fgetbit(f,0);
+            switch(bitbuf)
+            {
+               case 0: /* 110000 */
+                  buf[i++] = character;
+                  break;
+               case 1: /* 110001... */
+                  offset = lastoffset;
+                  length = fgetbitlen(f);
+                  break;
+               case 2: /* 110010... */
+                  offset = lastoffset2;
+                  length = fgetbitlen(f);
+                  break;
+               case 3: /* 110011... */
+                  offset = -1;
+                  length = fgetbitlen(f);
+                  break;
+               case 4: /* 110100... */
+               case 5: /* 110101... */
+               case 6: /* 110110... */
+               case 7: /* 110111... */
+                  bitbuf &= 3;
+                  bitbuf <<= 4;
+                  bitbuf |= fgetbit(f,0)<<3;
+                  bitbuf |= fgetbit(f,0)<<2;
+                  bitbuf |= fgetbit(f,0)<<1;
+                  bitbuf |= fgetbit(f,0);
+                  offset = -(int)(bitbuf + 2);
+                  length = fgetbitlen(f);
+                  break;
+               case 8: /* 111000... */
+               case 9: /* 111001... */
+                  bitbuf &= 1;
+                  bitbuf <<= 7;
+                  bitbuf |= fgetbit(f,0)<<6;
+                  bitbuf |= fgetbit(f,0)<<5;
+                  bitbuf |= fgetbit(f,0)<<4;
+                  bitbuf |= fgetbit(f,0)<<3;
+                  bitbuf |= fgetbit(f,0)<<2;
+                  bitbuf |= fgetbit(f,0)<<1;
+                  bitbuf |= fgetbit(f,0);
+                  offset = -(int)(bitbuf + 66);
+                  length = fgetbitlen(f);
+                  break;
+               case 10:/* 111010... */
+               case 11:/* 111011... */
+                  bitbuf &= 1;
+                  bitbuf <<= 9;
+                  bitbuf |= fgetbit(f,0)<<8;
+                  bitbuf |= fgetbit(f,0)<<7;
+                  bitbuf |= fgetbit(f,0)<<6;
+                  bitbuf |= fgetbit(f,0)<<5;
+                  bitbuf |= fgetbit(f,0)<<4;
+                  bitbuf |= fgetbit(f,0)<<3;
+                  bitbuf |= fgetbit(f,0)<<2;
+                  bitbuf |= fgetbit(f,0)<<1;
+                  bitbuf |= fgetbit(f,0);
+                  offset = -(int)(bitbuf + 322);
+                  length = fgetbitlen(f);
+                  break;
+               case 12:/* 111100... */
+               case 13:/* 111101... */
+               case 14:/* 111110... */
+               case 15:/* 111111... */
+                  bitbuf &= 15;
+                  bitbuf <<= 12;
+                  bitbuf |= fgetbit(f,0)<<11;
+                  bitbuf |= fgetbit(f,0)<<10;
+                  bitbuf |= fgetbit(f,0)<<9;
+                  bitbuf |= fgetbit(f,0)<<8;
+                  bitbuf |= fgetbit(f,0)<<7;
+                  bitbuf |= fgetbit(f,0)<<6;
+                  bitbuf |= fgetbit(f,0)<<5;
+                  bitbuf |= fgetbit(f,0)<<4;
+                  bitbuf |= fgetbit(f,0)<<3;
+                  bitbuf |= fgetbit(f,0)<<2;
+                  bitbuf |= fgetbit(f,0)<<1;
+                  bitbuf |= fgetbit(f,0);
+                  offset = bitbuf;
+                  if(offset == -16384) length = -1; /* Marker of the block end */
+                  else length = fgetbitlen(f);
+                  break;
+            }
+            if(length)
+            {
+               if(length < 0) break;
+               j = i + offset;
+               if(j < 0)
+               {
+                  printf("\nERROR: Something wrong with offset (%i)...\n",offset);
+               }
+               else
+               {
+                  do
+                  {
+                    if(j>=cursize)
+                    {
+                      printf("\nERROR: Something wrong with size (%i)....\n",j);
+                    }
+                    else buf[i++] = buf[j++];
+                  } while(--length);
+               }
+               if(offset!=lastoffset && offset!=-1)
+               {
+                  lastoffset2 = lastoffset;
+                  lastoffset = offset;
+               }
+            }
+            break;
+       }
+       if(length < 0)
+       {
+            if(i!=cursize)
+            {
+               printf("\nERROR: Something wrong with size (%i)...\n",i);
+            }
+            break;
+       }
+       bitbuf = fgetbit(f,0)<<1;
+     }
    }
    fwrite(buf,cursize,1,fo);
  }
