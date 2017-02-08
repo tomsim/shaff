@@ -7,17 +7,12 @@ Bytes 10,11 - size of the last block (less or equal to 16384, also big-endian)
 Then optional uncompressed auxilary data, for example in case of SNA-file:
 Bytes 12...14 "SNA" - signature to identify SNA header
 Bytes 15...41 - SNA 27-byte header itself
-Optional Huffman table after "HUF" for SHAFF2:
- #FF N - start section with codes with length N (1...254)
- XX ... - code for byte XX (Huffman code starts with most significant bit)
- #FF #00 ... - code for byte #FF
- #FF #FF - end of HUF header
 Then sequence of encoded 16KB blocks in chosen format:
 
 
 SHAFF0 data format:
 
-1st byte defines prefix byte (#FF by default) that is mentioned as #FF below
+1st byte in block defines prefix byte that should be used instead of #FF below
 XX - any byte other than #FF is a single data byte
 #FF #00 - single byte #FF
 #FF 0xxxxxxx LENGTH (distance 1...127)
@@ -70,3 +65,9 @@ SHAFF2 data format (FUTURE):
 01... - Huffman codes
 10... /
 11... - Reference that encoded the same way as in SHAFF1 above
+
+Optional Huffman table after "HUF" in header:
+ #FF N - start section with codes with length N (1...254)
+ XX ... - code for byte XX (Huffman code starts with most significant bit)
+ #FF #00 ... - code for byte #FF
+ #FF #FF - end of HUF table
