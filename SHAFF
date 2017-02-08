@@ -34,7 +34,6 @@ LENGTH is 1 or 2 bytes:
 
 SHAFF1 data format:
 
-1st bit specifies if single bytes are inverted (1) or not (0 - default value)
 0xxxxxxx - single byte #00...#7F
 10xxxxxxx - single byte #80...#FF
 110000 - repeat last single byte (no LENGTH after that)
