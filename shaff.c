@@ -835,7 +835,10 @@ int fputbit(FILE *f, int b)
  static int buf = 0;
  static int shi = 0x80;
  int flush = 0;
- if(b < 0) flush=1;
+ if(b < 0)
+ {
+    if(shi!=0x80) flush=1;
+ }
  else
  {
     if(b) buf|=shi;
@@ -1274,9 +1277,9 @@ int decode(char* fname, int flags)
            {
               do
               {
-                if(j>=cursize)
+                if(j>=cursize || i>=cursize)
                 {
-                  printf("\nERROR: Something wrong with size (%i)....\n",j);
+                  printf("\nERROR: Something wrong with size (%i->%i)...\n",j,i);
                 }
                 else buf[i++] = buf[j++];
               } while(--length);
@@ -1423,9 +1426,9 @@ int decode(char* fname, int flags)
                {
                   do
                   {
-                    if(j>=cursize)
+                    if(j>=cursize || i>=cursize)
                     {
-                      printf("\nERROR: Something wrong with size (%i)....\n",j);
+                      printf("\nERROR: Something wrong with size (%i->%i)....\n",j,i);
                     }
                     else buf[i++] = buf[j++];
                   } while(--length);
