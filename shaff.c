@@ -205,10 +205,10 @@ unsigned char enghuf[] = {
    0x5D,0xAF,0x00,
 /* 0x5B [ 01001100101 */
    0x5B,0x4C,0xA0,
-/* 0x51-Q;01001100100 */
+/* 0x51-Q 01001100100 */
    0x51,0x4C,0x80,
 /* === 12 bits === */ 0xFF,12,
-/* 0x4A-J;101011110010 */
+/* 0x4A-J 101011110010 */
    0x4A,0xAF,0x20,
 /* 0x09   101011110011 */
    0x09,0xAF,0x30,
@@ -217,7 +217,7 @@ unsigned char enghuf[] = {
    0x1A,0x2A,0xB0,
 /* 0x1B   0010101010111 */
    0x1B,0x2A,0xB8,
-/* 0x58-X;0010101010001 */
+/* 0x58-X 0010101010001 */
    0x58,0x2A,0x88,
 /* 0x7E ~ 0010101010000 */
    0x7E,0x2A,0x80,
@@ -238,9 +238,9 @@ unsigned char enghuf[] = {
 /* 0x60 ` 0100110011100 */
    0x60,0x4C,0xE0,
 /* 0x3E > 0100110011011 */
-   0x3E,0x4C,0xB8,
+   0x3E,0x4C,0xD8,
 /* 0x3D = 0100110011010 */
-   0x3D,0x4C,0xB0,
+   0x3D,0x4C,0xD0,
 /* 0x5A Z 0100110011001 */
    0x5A,0x4C,0xC8,
 /* 0x40 @ 0100110011000 */
@@ -305,7 +305,7 @@ int main(int argc, char **argv)
      printf("\t-b to save blocks as separate files\n");
      printf("\t-lN to limit length of matches (default value is 4 for SHAFF0 and 2 for SHAFF1/2)\n");
      printf("\t-xHH to set prefix byte other than FF (applicable only to SHAFF0 file format)\n");
-     printf("\t-e to set default table for English (applicable only to SHAFF2 file format)\n");
+     printf("\t-e to set default table for English text (applicable only to SHAFF2 file format)\n");
      printf("\nDecoding options:\n");
      printf("\t-d to decode compressed SHAFF file to file\n");
      printf("\t-c to decode compressed SHAFF file to screen\n");

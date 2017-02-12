@@ -24,7 +24,7 @@ Encoding options:
     -b to save blocks as separate files
     -lN to limit length of matches (default value is 4 for SHAFF0 and 2 for SHAFF1/2)
     -xHH to set prefix byte other than FF (applicable only to SHAFF0 file format)
-    -e to set default table for English (applicable only to SHAFF2 file format)
+    -e to set default table for English text (applicable only to SHAFF2 file format)
 
 Decoding options:
     -d to decode compressed SHAFF file to file
