@@ -23,7 +23,7 @@
 #include <string.h>
 #include <time.h>
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 #define GLOBALSTAT
 /*
 #define DEBUG
@@ -51,15 +51,234 @@ int xbyte = 255;
 int f_decode = 0;
 int f_blocks = 0;
 int f_stdout = 0;
+int f_english = 0;
 int f_test = 0;
 int f_sna = 0;
 unsigned char sna_header[27];
 
 int decode(char* fname, int flags); /* decode the file */
+int dehuf(FILE* f, int bits, unsigned char* curhuf); /* dehuffman one byte */
+int bihuf(int simb, unsigned char* curhuf, unsigned char** pb); /* how many bits? */
+int dohuf(FILE* f, int simb, unsigned char* curhuf); /* enhuffman one byte */
 int fgetbit(FILE *f, int x); /* x!=0 to fast forward to the next byte */
 int fputbit(FILE *f, int b); /* -1 if you need to flush the byte */
 int fputbitlen(FILE *f, int l); /* write length */
 int fgetbitlen(FILE *f); /* read length */
+
+/* Precalculated Huffman table for English text (options -2 -e) */
+unsigned char enghuf[] = {
+/* === 4 bits === */ 0xFF,4,
+/* 0x65 e 0001 */
+   0x65,0x10,
+/* === 5 bits === */ 0xFF,5,
+/* 0x20   00000 */
+   0x20,0x00,
+/* 0x61 a 10111 */
+   0x61,0xB8,
+/* 0x73 s 10110 */
+   0x73,0xB0,
+/* 0x6F o 10100 */
+   0x6F,0xA0,
+/* 0x69 i 01111 */
+   0x69,0x78,
+/* 0x72 r 01110 */
+   0x72,0x70,
+/* 0x6E n 01011 */
+   0x6E,0x58,
+/* 0x74 t 01010 */
+   0x74,0x50,
+/* 0x6C l 01000 */
+   0x6C,0x40,
+/* 0x64 d 01100 */
+   0x64,0x60,
+/* === 6 bits === */ 0xFF,6,
+/* 0x6D m 101010 */
+   0x6D,0xA8,
+/* 0x75 u 100111 */
+   0x75,0x9C,
+/* 0x70 p 100110 */
+   0x70,0x98,
+/* 0x2C , 100100 */
+   0x2C,0x90,
+/* 0x63 c 100010 */
+   0x63,0x88,
+/* 0x79 y 100001 */
+   0x79,0x84,
+/* 0x66 f 011011 */
+   0x66,0x6C,
+/* 0x77 w 011010 */
+   0x77,0x68,
+/* 0x67-g;010010 */
+   0x67,0x48,
+/* 0x68 h 001110 */
+   0x68,0x38,
+/* 0x22 " 001101 */
+   0x22,0x34,
+/* 0x62 b 001100 */
+   0x62,0x30,
+/* 0x2D - 001011 */
+   0x2D,0x2C,
+/* 0x0D   001001 */
+   0x0D,0x24,
+/* 0x0A   001000 */
+   0x0A,0x20,
+/* === 7 bits === */ 0xFF,7,
+/* 0x6B k 1010110 */
+   0x6B,0xAC,
+/* 0x27 ' 1001010 */
+   0x27,0x94,
+/* 0x5F _ 1000111 */
+   0x5F,0x8E,
+/* 0x2E . 1000110 */
+   0x2E,0x8C,
+/* 0x49 I 1000001 */
+   0x49,0x82,
+/* 0x21 ! 0011110 */
+   0x21,0x3C,
+/* 0x76 v 0010100 */
+   0x76,0x28,
+/* 0x41 A 0000110 */
+   0x41,0x0C,
+/* 0x54 T 0000100 */
+   0x54,0x08,
+/* === 8 bits === */ 0xFF,8,
+/* 0x3B ; 10101110 */
+   0x3B,0xAE,
+/* 0x3F ? 10010110 */
+   0x3F,0x96,
+/* 0x45 E 01001111 */
+   0x45,0x4F,
+/* 0x53 S 01001110 */
+   0x53,0x4E,
+/* 0x57 W 00111111 */
+   0x57,0x3F,
+/* 0x4E N 00101011 */
+   0x4E,0x2B,
+/* 0x44 D 00001111 */
+   0x44,0x0F,
+/* 0x4F O 00001110 */
+   0x4F,0x0E,
+/* 0x43 C 00001011 */
+   0x43,0x0B,
+/* 0x78 x 00001010 */
+   0x78,0x0A,
+/* === 9 bits === */ 0xFF,9,
+/* 0x48 H 100101111 */
+   0x48,0x97,0x80,
+/* 0x52 R 100101110 */
+   0x52,0x97,0x00,
+/* 0x50 P 100000011 */
+   0x50,0x81,0x80,
+/* 0x46 F 100000010 */
+   0x46,0x81,0x00,
+/* 0x4D M 100000000 */
+   0x4D,0x80,0x00,
+/* 0x4C L 010011011 */
+   0x4C,0x4D,0x80,
+/* 0x3A : 010011010 */
+   0x3A,0x4D,0x00,
+/* 0x6A j 001111100 */
+   0x6A,0x3E,0x00,
+/* === 10 bits === */ 0xFF,10,
+/* 0x7A z 1010111111 */
+   0x7A,0xAF,0xC0,
+/* 0x29 ) 1010111110 */
+   0x29,0xAF,0x80,
+/* 0x28 ( 1010111101 */
+   0x28,0xAF,0x40,
+/* 0x59 Y 1000000011 */
+   0x59,0x80,0xC0,
+/* 0x4B K 1000000010 */
+   0x4B,0x80,0x80,
+/* 0x56 V 0011111011 */
+   0x56,0x3E,0xC0,
+/* 0x42 B 0011111010 */
+   0x42,0x3E,0x80,
+/* 0x47 G 0010101011 */
+   0x47,0x2A,0xC0,
+/* 0x71 q 0010101001 */
+   0x71,0x2A,0x40,
+/* 0x55 U 0010101000 */
+   0x55,0x2A,0x00,
+/* === 11 bits === */ 0xFF,11,
+/* 0x5D ] 10101111000 */
+   0x5D,0xAF,0x00,
+/* 0x5B [ 01001100101 */
+   0x5B,0x4C,0xA0,
+/* 0x51-Q;01001100100 */
+   0x51,0x4C,0x80,
+/* === 12 bits === */ 0xFF,12,
+/* 0x4A-J;101011110010 */
+   0x4A,0xAF,0x20,
+/* 0x09   101011110011 */
+   0x09,0xAF,0x30,
+/* === 13 bits === */ 0xFF,13,
+/* 0x1A   0010101010110 */
+   0x1A,0x2A,0xB0,
+/* 0x1B   0010101010111 */
+   0x1B,0x2A,0xB8,
+/* 0x58-X;0010101010001 */
+   0x58,0x2A,0x88,
+/* 0x7E ~ 0010101010000 */
+   0x7E,0x2A,0x80,
+/* 0x24 $ 0010101010101 */
+   0x24,0x2A,0xA8,
+/* 0x23 # 0010101010100 */
+   0x23,0x2A,0xA0,
+/* 0x7D } 0010101010011 */
+   0x7D,0x2A,0x98,
+/* 0x7C | 0010101010010 */
+   0x7C,0x2A,0x90,
+/* 0x5E ^ 0100110011111 */
+   0x5E,0x4C,0xF8,
+/* 0x5C \ 0100110011110 */
+   0x5C,0x4C,0xF0,
+/* 0x7B { 0100110011101 */
+   0x7B,0x4C,0xE8,
+/* 0x60 ` 0100110011100 */
+   0x60,0x4C,0xE0,
+/* 0x3E > 0100110011011 */
+   0x3E,0x4C,0xB8,
+/* 0x3D = 0100110011010 */
+   0x3D,0x4C,0xB0,
+/* 0x5A Z 0100110011001 */
+   0x5A,0x4C,0xC8,
+/* 0x40 @ 0100110011000 */
+   0x40,0x4C,0xC0,
+/* 0x3C < 0100110001111 */
+   0x3C,0x4C,0x78,
+/* 0x2F / 0100110001110 */
+   0x2F,0x4C,0x70,
+/* 0x2B + 0100110001101 */
+   0x2B,0x4C,0x68,
+/* 0x2A * 0100110001100 */
+   0x2A,0x4C,0x60,
+/* 0x26 & 0100110001011 */
+   0x26,0x4C,0x58,
+/* 0x25 % 0100110001010 */
+   0x25,0x4C,0x50,
+/* 0x39 9 0100110001001 */
+   0x39,0x4C,0x48,
+/* 0x38 8 0100110001000 */
+   0x38,0x4C,0x40,
+/* 0x37 7 0100110000111 */
+   0x37,0x4C,0x38,
+/* 0x36 6 0100110000110 */
+   0x36,0x4C,0x30,
+/* 0x35 5 0100110000101 */
+   0x35,0x4C,0x28,
+/* 0x34 4 0100110000100 */
+   0x34,0x4C,0x20,
+/* 0x33 3 0100110000011 */
+   0x33,0x4C,0x18,
+/* 0x32 2 0100110000010 */
+   0x32,0x4C,0x10,
+/* 0x31 1 0100110000001 */
+   0x31,0x4C,0x08,
+/* 0x30 0 0100110000000 */
+   0x30,0x4C,0x00,
+/* === end of table === */ 0xFF,0xFF
+};
 
 int main(int argc, char **argv)
 {
@@ -82,12 +301,14 @@ int main(int argc, char **argv)
      printf("\nEncoding options:\n");
      printf("\t-0 to use SHAFF0 file format (by default)\n");
      printf("\t-1 to use SHAFF1 file format\n");
+     printf("\t-2 to use SHAFF2 file format (experimental)\n");
      printf("\t-b to save blocks as separate files\n");
-     printf("\t-lN to limit length of matches (default value is 4 for SHAFF0 and 2 for SHAFF1)\n");
-     printf("\t-xHH to set prefix byte other than FF (applicable only to SHAFF0)\n");
+     printf("\t-lN to limit length of matches (default value is 4 for SHAFF0 and 2 for SHAFF1/2)\n");
+     printf("\t-xHH to set prefix byte other than FF (applicable only to SHAFF0 file format)\n");
+     printf("\t-e to set default table for English (applicable only to SHAFF2 file format)\n");
      printf("\nDecoding options:\n");
-     printf("\t-d to decode SHAFF0 or SHAFF1 compressed file to file\n");
-     printf("\t-c to decode SHAFF0 or SHAFF1 compressed file to screen\n");
+     printf("\t-d to decode compressed SHAFF file to file\n");
+     printf("\t-c to decode compressed SHAFF file to screen\n");
      printf("\n");
      return 0;
    }
@@ -99,6 +320,8 @@ int main(int argc, char **argv)
        {
          case '0': ver = 0; break;
          case '1': ver = 1; break;
+         case '2': ver = 2; break;
+         case 'e': f_english = 1; break;
          case 'd': f_decode = 1; break;
          case 'b': f_blocks = 1; break;
          case 'c': f_stdout = 1; f_decode = 1; break;
@@ -135,7 +358,7 @@ int main(int argc, char **argv)
    f = fopen(fname,"rb");
    if(f==NULL)
    {
-     printf("\nERROR: Can't open file '%s'\n",fname);
+     printf("\nERROR: Can't open file '%s'\n\n",fname);
      return -1;
    }
    if(strstr(fname,".sna")!=NULL || strstr(fname,".SNA")!=NULL) f_sna = 1;
@@ -148,7 +371,7 @@ int main(int argc, char **argv)
      if(sz!=49179)
      {
        if(f!=NULL) fclose(f);
-       printf("\nERROR: Invalid SNA file '%s'\n",fname);
+       printf("\nERROR: Invalid SNA file '%s'\n\n",fname);
        return -2;
      }
      fread(sna_header,1,27,f);
@@ -163,17 +386,10 @@ int main(int argc, char **argv)
  if(fo==NULL)
  {
    if(f!=NULL) fclose(f);
-   printf("\nERROR: Can't open file '%s' for writing\n",fname);
+   printf("\nERROR: Can't open file '%s' for writing\n\n",fname);
    return -3;
  }
- printf("Version of format to use: SHAFF%i\n",ver);
- if(ver!=0 && ver!=1)
- {
-   if(f!=NULL) fclose(f);
-   if(fo!=NULL) fclose(fo);
-   printf("\nERROR: Invalid version number!\n");
-   return -10;
- }
+ printf("Chosen method: SHAFF%i\n",ver);
  fprintf(fo,"SHAFF%i",ver);
  fputc(0,fo);
  if(!f_sna) fputc(12,fo);
@@ -187,8 +403,37 @@ int main(int argc, char **argv)
  printf("Minimal length to detect: %i bytes\n",lim);
  if(xbyte<0 || xbyte>255) xbyte = 255;
  if(ver==0) printf("Prefix byte for references: 0x%2.2X\n",xbyte);
+ if(ver==2)
+ {
+    if(f_english) printf("Assume that input is English text\n");
+    else
+    {
+       if(f!=NULL) fclose(f);
+       if(fo!=NULL) fclose(fo);
+       printf("\nERROR: Experimental support for SHAFF2 requires option -e (English text)\n\n");
+       return -11;
+    }
+ }
  n = sz&BLOCKMS;
  k = (sz/BLOCKSZ)+(n?1:0);
+ if(f_blocks)
+ {
+    if(n>=1000000)
+    {
+       if(f!=NULL) fclose(f);
+       if(fo!=NULL) fclose(fo);
+       printf("\nERROR: Too many blocks (%i)!\n\n",n);
+       return -11;
+    }
+    else if(n>=100000) f_blocks = 6;
+    else if(n>=10000) f_blocks = 5;
+    else if(n>=1000) f_blocks = 4;
+    else if(n>=100) f_blocks = 3;
+    else if(n>=10) f_blocks = 2;
+    else f_blocks = 1;
+    printf("Store blocks in separate files with %i-digit suffix\n",f_blocks);
+    for(i=0;i<f_blocks;i++) strcat(fname,"0");
+ }
  printf("Number of blocks to encode: %i\n",k);
  fputc((k>>8)&255,fo);fputc(k&255,fo);
  if(n==0) n=BLOCKSZ;
@@ -208,6 +453,28 @@ int main(int argc, char **argv)
    printf("\nBlock %i:\n",++n);
    memset(cor_table,0,sizeof(unsigned int)*COR16K);
    for(i=(f_test?sz:0);i<BLOCKSZ;i++) one_block[i]=-1;
+   if(f_blocks)
+   {
+      k = strlen(fname) - f_blocks;
+      switch(f_blocks)
+      {
+        case 1: sprintf(&fname[k],"%1d",n); break;
+        case 2: sprintf(&fname[k],"%02d",n); break;
+        case 3: sprintf(&fname[k],"%03d",n); break;
+        case 4: sprintf(&fname[k],"%04d",n); break;
+        case 5: sprintf(&fname[k],"%05d",n); break;
+        case 6: sprintf(&fname[k],"%06d",n); break;
+      }
+      if(fo!=NULL) fclose(fo);
+      printf("Opening output partial file '%s'\n",fname);
+      fo = fopen(fname,"wb");
+      if(fo==NULL)
+      {
+        if(f!=NULL) fclose(f);
+        printf("\nERROR: Can't open partial file '%s' for writing\n\n",fname);
+        return -8;
+      }
+   }
    curo = ftell(fo);
    printf("Current offset %u\n",curo);
    k = sz - pt;
@@ -323,7 +590,7 @@ int main(int argc, char **argv)
        {
          if(f!=NULL) fclose(f);
          if(fo!=NULL) fclose(fo);
-         printf("\nERROR: Too many elements...\n");
+         printf("\nERROR: Too many elements...\n\n");
          return -4;
        }
      }
@@ -369,7 +636,7 @@ int main(int argc, char **argv)
        {
          if(f!=NULL) fclose(f);
          if(fo!=NULL) fclose(fo);
-         printf("\nERROR: %i out of range (p=%i)\n",j,p);
+         printf("\nERROR: %i out of range (p=%i)\n\n",j,p);
          return -5;
        }
        cor_table[j] = 0;
@@ -402,7 +669,7 @@ int main(int argc, char **argv)
      {
        if(f!=NULL) fclose(f);
        if(fo!=NULL) fclose(fo);
-       printf("\nERROR: %i collisions detected within range #%4.4X...#%4.4X\n",
+       printf("\nERROR: %i collisions detected within range #%4.4X...#%4.4X\n\n",
              e,copies[i].address,copies[i].address+copies[i].size-1);
        return -6;
      }
@@ -432,7 +699,7 @@ int main(int argc, char **argv)
          {
             if(f!=NULL) fclose(f);
             if(fo!=NULL) fclose(fo);
-            printf("\nERROR: index %i out of range at #%4.4X\n",j,i);
+            printf("\nERROR: index %i out of range at #%4.4X\n\n",j,i);
             return -7;
          }
          o = copies[j].offset;
@@ -503,7 +770,7 @@ int main(int argc, char **argv)
              }
            }
          }
-         else if(ver==1) /* SHAFF1 */
+         else /* SHAFF1 and SHAFF2 */
          {
            kk = k; /* Estimate effectiveness of compression */
            w = -1;
@@ -513,8 +780,12 @@ int main(int argc, char **argv)
            {
             if(kk==0) w = copies[j].oldval;
             else w = one_block[i+kk]&255;
-            if(w&0x80) e-=9;
-            else e-=8;
+            if(ver==1)
+            {
+               if(w&0x80) e-=9;
+               else e-=8;
+            }
+            else e-=bihuf(w,enghuf,NULL); /* version 2 */
            }
            ll = 0;
            if(o==d || o==dd || o==-1)
@@ -674,19 +945,29 @@ int main(int argc, char **argv)
 #ifdef DEBUG1
              printf("L 0x%2.2X %c <<< #%4.4X [%i] e=%i\n",w,(w>32)?w:' ',i,e,ll);
 #endif
-             if(w&0x80)
+             if(ver==1)
              {
+              if(w&0x80)
+              {
                 fputbit(fo,1);
                 fputbit(fo,0);
+              }
+              else fputbit(fo,0);
+              fputbit(fo,w&0x40);
+              fputbit(fo,w&0x20);
+              fputbit(fo,w&0x10);
+              fputbit(fo,w&0x08);
+              fputbit(fo,w&0x04);
+              fputbit(fo,w&0x02);
+              fputbit(fo,w&0x01);
              }
-             else fputbit(fo,0);
-             fputbit(fo,w&0x40);
-             fputbit(fo,w&0x20);
-             fputbit(fo,w&0x10);
-             fputbit(fo,w&0x08);
-             fputbit(fo,w&0x04);
-             fputbit(fo,w&0x02);
-             fputbit(fo,w&0x01);
+             else if(dohuf(fo,w,enghuf)) /* version 2 */
+             {
+              if(f!=NULL) fclose(f);
+              if(fo!=NULL) fclose(fo);
+              printf("\nERROR: literal 0x%2.2X can not be encoded by method 2!\n\n",w);
+              return -12;
+             }
             }
            }
          }
@@ -700,7 +981,7 @@ int main(int argc, char **argv)
            {
               if(f!=NULL) fclose(f);
               if(fo!=NULL) fclose(fo);
-              printf("\nERROR: literal %i out of range at #%4.4X\n",ll,i);
+              printf("\nERROR: literal %i out of range at #%4.4X\n\n",ll,i);
               return -9;
            }
 #ifdef DEBUG1
@@ -711,22 +992,22 @@ int main(int argc, char **argv)
            fputc(ll,fo);
            if(ll==xbyte) fputc(0,fo);
          }
-         else if(ver==1) /* SHAFF1 */
+         else /* SHAFF1 and SHAFF2 */
          {
-           if(one_block[i]==b)
+           if(one_block[i]==b && (ver==1 || /* ver 2 */ bihuf(b,enghuf,NULL)>=6))
            {
 #ifdef DEBUG
              printf("Use last byte #%2.2X\n",b);
 #endif
              xcount++;
-             fputbit(fo,1);
-             fputbit(fo,1);
-             fputbit(fo,0);
-             fputbit(fo,0);
-             fputbit(fo,0);
 #ifdef DEBUG1
              printf("X last byte 0x%2.2X %c\n",b,(b>32)?b:' ');
 #endif
+             fputbit(fo,1);
+             fputbit(fo,1);
+             fputbit(fo,0);
+             fputbit(fo,0);
+             fputbit(fo,0);
              fputbit(fo,0);
            }
            else
@@ -737,19 +1018,29 @@ int main(int argc, char **argv)
 #ifdef DEBUG1
              printf("L 0x%2.2X %c\n",w,(w>32)?w:' ');
 #endif
-             if(w&0x80)
+             if(ver==1)
              {
+              if(w&0x80)
+              {
                 fputbit(fo,1);
                 fputbit(fo,0);
+              }
+              else fputbit(fo,0);
+              fputbit(fo,w&0x40);
+              fputbit(fo,w&0x20);
+              fputbit(fo,w&0x10);
+              fputbit(fo,w&0x08);
+              fputbit(fo,w&0x04);
+              fputbit(fo,w&0x02);
+              fputbit(fo,w&0x01);
              }
-             else fputbit(fo,0);
-             fputbit(fo,w&0x40);
-             fputbit(fo,w&0x20);
-             fputbit(fo,w&0x10);
-             fputbit(fo,w&0x08);
-             fputbit(fo,w&0x04);
-             fputbit(fo,w&0x02);
-             fputbit(fo,w&0x01);
+             else if(dohuf(fo,w,enghuf)) /* version 2 */
+             {
+              if(f!=NULL) fclose(f);
+              if(fo!=NULL) fclose(fo);
+              printf("\nERROR: literal 0x%2.2X can not be encoded by method 2!\n\n",w);
+              return -12;
+             }
            }
          }
        }
@@ -765,7 +1056,7 @@ int main(int argc, char **argv)
      fputc(0xC0,fo);
      fputc(0x00,fo);
    }
-   if(ver==1) /* SHAFF1 */
+   else /* SHAFF1 and SHAFF2 */
    {
      for(ll=0;ll<4;ll++) fputbit(fo,1);
      for(ll=0;ll<14;ll++) fputbit(fo,0);
@@ -820,11 +1111,19 @@ int main(int argc, char **argv)
 #ifdef GLOBALSTAT
  }
 #endif
- l = ftell(fo);
- if(f!=NULL)
-    printf("\nCompressed file size: %i bytes (%i%%)\n",l,l*100/ftell(f));
+ if(!f_blocks)
+ {
+   l = ftell(fo);
+   if(f!=NULL)
+      printf("\nCompressed file size: %i bytes (%i%%)\n",l,l*100/ftell(f));
+ }
  if(f!=NULL) fclose(f);
  if(fo!=NULL) fclose(fo);
+ if(pt < sz)
+ {
+    printf("\nERROR: Finished unexpectedly!\n\n");
+    return -10;
+ }
  t2 = time(NULL);
  printf("Working time: %dm%02ds\nGood bye!\n\n",(int)((t2-t1)/60),(int)((t2-t1)%60));
  return 0;
@@ -1093,13 +1392,79 @@ int fputbitlen(FILE *f, int l)
  }
  else
  {
-   printf("\nERROR: Length %i is too long\n",l);
+   printf("\nERROR: Length %i is too long\n\n",l);
    return 0;
  }
  return 1;
 }
 
-int fgetbit(FILE *f, int x)
+int bihuf(int simb, unsigned char* curhuf, unsigned char** pb)
+{
+ int result = -1;
+ int b,bytes = 0;
+ while(1)
+ {
+   if(*curhuf==0xFF)
+   {
+      curhuf++;
+      if(curhuf==0x00)
+      {
+         if(simb==0xFF) break;
+         curhuf+=bytes+1;
+      }
+      else if(*curhuf==0xFF)
+      {
+         result = -1;
+         break;
+      }
+      else
+      {
+         b = result = *curhuf;
+         bytes = 0;
+         while(b > 0)
+         {
+            bytes++;
+            b-=8;
+         }
+         curhuf++;
+      }
+   }
+   else
+   {
+      if(*curhuf==simb) break;
+      curhuf+=bytes+1;
+   }
+ }
+ if(result < 0) return 0;
+ if(pb!=NULL) *pb = ++curhuf;
+ return result;
+}
+
+int dohuf(FILE* f, int simb, unsigned char* curhuf)
+{
+ int i,j,m,bits;
+ unsigned char* pb;
+ bits = bihuf(simb,curhuf,&pb);
+ if(bits > 0)
+ {
+    for(i=0;i<bits;i++)
+    {
+      if(!(i&7))
+      {
+         m = 0x80;
+         j = i>>3;
+      }
+      fputbit(f,pb[j]&m);
+      m >>= 1;
+    }
+    return 0;
+ }
+ return -1; /* not found */
+}
+
+/* <><><><><><><><> SHAFF DECODER <><><><><><><><> */
+
+int fgetbit(FILE *f, int x) /* SHAFF1 and SHAFF2 */
 {
  static int buf = 0;
  static int shi = 1;
@@ -1112,7 +1477,7 @@ int fgetbit(FILE *f, int x)
  return (buf&shi)?1:0;
 }
 
-int fgetbitlen(FILE *f)
+int fgetbitlen(FILE *f) /* SHAFF1 and SHAFF2 */
 {
  int lbase = 2;
  int nbit = 1;
@@ -1130,7 +1495,77 @@ int fgetbitlen(FILE *f)
  return lbase+(len>>1);
 }
 
-int decode(char* fname, int flags)
+int dehuf(FILE* f, int bits, unsigned char* curhuf) /* SHAFF2 */
+{
+ unsigned char by[8];
+ int bytes,i,e;
+ int result = -1;
+ int curbits = 2;
+ while(1)
+ {
+   if(*curhuf!=0xFF){curhuf++;continue;}
+   curhuf++;
+   if(*curhuf==0xFF) break;
+   if(*curhuf==0x00) continue;
+   if(*curhuf > curbits)
+   {
+      while(curbits!=*curhuf)
+      {
+        bits <<= 1;
+        bits |= fgetbit(f,0);
+        curbits++;
+      }
+   }
+   if(curbits <= 8)
+   {
+      bytes = 1;
+      by[0] = bits<<(8-curbits);
+   }
+   else if(curbits <= 16)
+   {
+      bytes = 2;
+      by[0] = bits>>(curbits-8);
+      by[1] = (bits<<(16-curbits))&255;
+   }
+   else /* curbits > 16 */
+   {
+      /* TODO: fix it later */
+      printf("\nERROR: Code is too long (%i bits)\n\n",curbits);
+   }
+   curhuf++;
+   while(1)
+   {
+      result = *curhuf;
+      if(result==0xFF)
+      {
+         curhuf++;
+         if(*curhuf==0x00) curhuf++;
+         else /* next bit count */
+         {
+            --curhuf;
+            result = -1;
+            break;
+         }
+      }
+      curhuf++;
+      e = 0;
+      for(i=0;i<bytes;i++)
+      {
+         if(by[i]!=*curhuf) e++;
+         curhuf++;
+      }
+      if(e==0) break; /* found */
+   }
+   if(result >= 0) break;
+ }
+ if(result < 0)
+ {
+   printf("\nERROR: Can't find the code 0x%8.8X\n\n",bits);
+ }
+ return result&255;
+}
+
+int decode(char* fname, int flags) /* SHAFF0, SHAFF1 and SHAFF2 (-e) */
 {
  FILE *f,*fo;
  char fnew[100];
@@ -1145,7 +1580,7 @@ int decode(char* fname, int flags)
  f = fopen(fname,"rb");
  if(f==NULL)
  {
-   printf("\nERROR: Can't open file '%s'\n",fname);
+   printf("\nERROR: Can't open file '%s'\n\n",fname);
    return -101;
  }
  fseek(f,0,SEEK_END);
@@ -1159,14 +1594,14 @@ int decode(char* fname, int flags)
  if(nerr)
  {
    fclose(f);
-   printf("\nERROR: Ivalid file '%s'\n",fname);
+   printf("\nERROR: Ivalid file '%s'\n\n",fname);
    return -102;
  }
  version = fgetc(f)-'0';
- if(version<0 || version>1)
+ if(version<0 || version>2)
  {
    fclose(f);
-   printf("\nERROR: Unsupported version %i\n",version);
+   printf("\nERROR: Unsupported version %i\n\n",version);
    return -103;
  }
  offset = fgetc(f)<<8;
@@ -1183,7 +1618,7 @@ int decode(char* fname, int flags)
 #endif
  if(offset >= filesize)
  {
-   printf("\nERROR: File '%s' doesn't have data in it!\n");
+   printf("\nERROR: File '%s' doesn't have data in it!\n\n",fname);
    return -104;
  }
  if(flags&1) fo = stdout;
@@ -1199,7 +1634,7 @@ int decode(char* fname, int flags)
  if(fo==NULL)
  {
    fclose(f);
-   printf("\nERROR: Can't open file '%s'\n",fnew);
+   printf("\nERROR: Can't open file '%s'\n\n",fnew);
    return -105;
  }
 #ifdef DEBUG
@@ -1251,7 +1686,7 @@ int decode(char* fname, int flags)
                  /* Marker of the block end */
                  if(i!=cursize)
                  {
-                    printf("\nERROR: Something wrong with size (%i)...\n",i);
+                    printf("\nERROR: Something wrong with size (%i)...\n\n",i);
                  }
                  break;
               }
@@ -1271,7 +1706,7 @@ int decode(char* fname, int flags)
            j = i + offset;
            if(j < 0)
            {
-              printf("\nERROR: Something wrong with offset (%i)...\n",offset);
+              printf("\nERROR: Something wrong with offset (%i)...\n\n",offset);
            }
            else
            {
@@ -1279,7 +1714,7 @@ int decode(char* fname, int flags)
               {
                 if(j>=cursize || i>=cursize)
                 {
-                  printf("\nERROR: Something wrong with size (%i->%i)...\n",j,i);
+                  printf("\nERROR: Something wrong with size (%i->%i)...\n\n",j,i);
                 }
                 else buf[i++] = buf[j++];
               } while(--length);
@@ -1290,7 +1725,7 @@ int decode(char* fname, int flags)
           buf[i++] = character;
      }
    }
-   else if(version==1)
+   else /* version 1 and 2 */
    {
      i = 0;
      length = character = 0;
@@ -1303,26 +1738,36 @@ int decode(char* fname, int flags)
        {
          case 0: /* 00xxxxxx */
          case 1: /* 01xxxxxx */
-            /* Literal <0x80 */
-            bitbuf <<= 6;
-            bitbuf |= fgetbit(f,0)<<5;
-            bitbuf |= fgetbit(f,0)<<4;
-            bitbuf |= fgetbit(f,0)<<3;
-            bitbuf |= fgetbit(f,0)<<2;
-            bitbuf |= fgetbit(f,0)<<1;
-            bitbuf |= fgetbit(f,0);
+            if(version==2)
+               bitbuf = dehuf(f,bitbuf,enghuf);
+            else /* version 1 */
+            {
+             /* Literal <0x80 */
+             bitbuf <<= 6;
+             bitbuf |= fgetbit(f,0)<<5;
+             bitbuf |= fgetbit(f,0)<<4;
+             bitbuf |= fgetbit(f,0)<<3;
+             bitbuf |= fgetbit(f,0)<<2;
+             bitbuf |= fgetbit(f,0)<<1;
+             bitbuf |= fgetbit(f,0);
+            }
             character = buf[i++] = bitbuf;
             break;
          case 2: /* 10xxxxxxx */
-            /* Literal >=0x80 */
-            bitbuf = 0x80;
-            bitbuf |= fgetbit(f,0)<<6;
-            bitbuf |= fgetbit(f,0)<<5;
-            bitbuf |= fgetbit(f,0)<<4;
-            bitbuf |= fgetbit(f,0)<<3;
-            bitbuf |= fgetbit(f,0)<<2;
-            bitbuf |= fgetbit(f,0)<<1;
-            bitbuf |= fgetbit(f,0);
+            if(version==2)
+               bitbuf = dehuf(f,bitbuf,enghuf);
+            else /* version 1 */
+            {
+             /* Literal >=0x80 */
+             bitbuf = 0x80;
+             bitbuf |= fgetbit(f,0)<<6;
+             bitbuf |= fgetbit(f,0)<<5;
+             bitbuf |= fgetbit(f,0)<<4;
+             bitbuf |= fgetbit(f,0)<<3;
+             bitbuf |= fgetbit(f,0)<<2;
+             bitbuf |= fgetbit(f,0)<<1;
+             bitbuf |= fgetbit(f,0);
+            }
             character = buf[i++] = bitbuf;
             break;
          case 3: /* 11... - Reference */
@@ -1420,7 +1865,7 @@ int decode(char* fname, int flags)
                j = i + offset;
                if(j < 0)
                {
-                  printf("\nERROR: Something wrong with offset (%i)...\n",offset);
+                  printf("\nERROR: Something wrong with offset (%i)...\n\n",offset);
                }
                else
                {
@@ -1428,7 +1873,7 @@ int decode(char* fname, int flags)
                   {
                     if(j>=cursize || i>=cursize)
                     {
-                      printf("\nERROR: Something wrong with size (%i->%i)....\n",j,i);
+                      printf("\nERROR: Something wrong with size (%i->%i)....\n\n",j,i);
                     }
                     else buf[i++] = buf[j++];
                   } while(--length);
@@ -1445,7 +1890,7 @@ int decode(char* fname, int flags)
        {
             if(i!=cursize)
             {
-               printf("\nERROR: Something wrong with size (%i)...\n",i);
+               printf("\nERROR: Something wrong with size (%i)...\n\n",i);
             }
             break;
        }
