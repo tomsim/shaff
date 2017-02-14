@@ -1,5 +1,7 @@
+Feb 13, 2017 - v1.2
+- supported option -b... to store blocks in separate files
+
 Feb 12, 2017 - v1.1
-- supported option -b to store blocks in separate files
 - experimental support for SHAFF2 (with option -e only)
 
 Feb 8, 2017 - v1.0

@@ -23,9 +23,10 @@
 #include <string.h>
 #include <time.h>
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 #define GLOBALSTAT
 /*
+#define PARALLEL
 #define DEBUG
 #define DEBUG1
 */
@@ -55,6 +56,9 @@ int f_english = 0;
 int f_test = 0;
 int f_sna = 0;
 unsigned char sna_header[27];
+int n_blocks = 0;
+int n_block_start = 1;
+int n_block_finish = -1;
 
 int decode(char* fname, int flags); /* decode the file */
 int dehuf(FILE* f, int bits, unsigned char* curhuf); /* dehuffman one byte */
@@ -283,7 +287,7 @@ unsigned char enghuf[] = {
 int main(int argc, char **argv)
 {
  FILE *f,*fo;
- int i,j,k,m,n,o,oo,p,w,z,e,b,d,dd,ll,kk,sz,bsz,pt=0;
+ int i,j,k,m,n,o,oo,p,w,z,e,b,d,dd,ll,kk,sz,bsz,fs,pt=0;
  unsigned int l,curo,lcount,xcount,ui;
  unsigned long t1,t2;
  char *po,fname[100];
@@ -302,10 +306,16 @@ int main(int argc, char **argv)
      printf("\t-0 to use SHAFF0 file format (by default)\n");
      printf("\t-1 to use SHAFF1 file format\n");
      printf("\t-2 to use SHAFF2 file format (experimental)\n");
-     printf("\t-b to save blocks as separate files\n");
+     printf("\t-b to compress blocks into separate files\n");
+     printf("\t-bN to compress only block N\n");
+     printf("\t-bN-M to compress blocks N..M\n");
      printf("\t-lN to limit length of matches (default value is 4 for SHAFF0 and 2 for SHAFF1/2)\n");
      printf("\t-xHH to set prefix byte other than FF (applicable only to SHAFF0 file format)\n");
      printf("\t-e to set default table for English text (applicable only to SHAFF2 file format)\n");
+#ifdef PARALLEL
+     printf("\t-pN to compress in parallel using N worker threads\n");
+     printf("\t-p to compress in parallel on all available cores/processors\n");
+#endif
      printf("\nDecoding options:\n");
      printf("\t-d to decode compressed SHAFF file to file\n");
      printf("\t-c to decode compressed SHAFF file to screen\n");
@@ -323,10 +333,16 @@ int main(int argc, char **argv)
          case '2': ver = 2; break;
          case 'e': f_english = 1; break;
          case 'd': f_decode = 1; break;
-         case 'b': f_blocks = 1; break;
          case 'c': f_stdout = 1; f_decode = 1; break;
          case 'l': lim = atoi(&argv[i][2]); break;
          case 'x': xbyte = strtol(&argv[i][2],NULL,16); break;
+         case 'b': f_blocks = 1;
+                   if(argv[i][2])
+                   {
+                     n_block_start = n_block_finish = atoi(&argv[i][2]);
+                     po = strchr(&argv[i][2],'-'); if(po!=NULL) n_block_finish = atoi(po);
+                   }
+                   break;
        }
      }
      else strncpy(fname,argv[i],100);
@@ -418,24 +434,25 @@ int main(int argc, char **argv)
  k = (sz/BLOCKSZ)+(n?1:0);
  if(f_blocks)
  {
-    if(n>=1000000)
+    if(k>=1000000)
     {
        if(f!=NULL) fclose(f);
        if(fo!=NULL) fclose(fo);
-       printf("\nERROR: Too many blocks (%i)!\n\n",n);
+       printf("\nERROR: Too many blocks (%i)!\n\n",k);
        return -11;
     }
-    else if(n>=100000) f_blocks = 6;
-    else if(n>=10000) f_blocks = 5;
-    else if(n>=1000) f_blocks = 4;
-    else if(n>=100) f_blocks = 3;
-    else if(n>=10) f_blocks = 2;
+    else if(k>=100000) f_blocks = 6;
+    else if(k>=10000) f_blocks = 5;
+    else if(k>=1000) f_blocks = 4;
+    else if(k>=100) f_blocks = 3;
+    else if(k>=10) f_blocks = 2;
     else f_blocks = 1;
     printf("Store blocks in separate files with %i-digit suffix\n",f_blocks);
     for(i=0;i<f_blocks;i++) strcat(fname,"0");
  }
- printf("Number of blocks to encode: %i\n",k);
+ printf("Total number of blocks to encode: %i\n",k);
  fputc((k>>8)&255,fo);fputc(k&255,fo);
+ n_blocks = k;
  if(n==0) n=BLOCKSZ;
  printf("Size of the last block: %i\n",n);
  fputc((n>>8)&255,fo);fputc(n&255,fo);
@@ -444,13 +461,46 @@ int main(int argc, char **argv)
    fprintf(fo,"SNA");
    fwrite(sna_header,1,27,fo);
  }
+ fs = 0;
+ if(n_block_finish < 0) n_block_finish = n_blocks;
+ if(n_block_finish > n_blocks) n_block_finish = n_blocks;
+ if(n_block_start > n_blocks) n_block_start = n_blocks;
+ if(n_block_start > n_block_finish) n_block_finish = n_block_start;
+ if(n_blocks > 1)
+ {
+  if(n_block_start == n_block_finish)
+  {
+    fs = 1;
+    printf("Process only block %i\n",n_block_start);
+  }
+  else if(n_block_start!=1 && n_block_finish!=n_blocks)
+  {
+    fs = 2;
+    printf("Process only blocks %i..%i\n",n_block_start,n_block_finish);
+  }
+ }
 #ifdef GLOBALSTAT
  memset(literalstat,0,sizeof(unsigned int)*256);
 #endif
  n = 0;
  while(pt < sz)
  {
-   printf("\nBlock %i:\n",++n);
+   if(!fs) printf("\nBlock %i:\n",++n);
+   else
+   {
+      n++;
+      if(n < n_block_start || n > n_block_finish)
+      {
+         pt += BLOCKSZ;
+         continue;
+      }
+      else
+      {
+         ui = (n-1)<<BLOCKBZ;
+         fseek(f,ui,SEEK_SET);
+         printf("\nBlock %i (%8.8X):\n",n,ui);
+      }
+   }
    memset(cor_table,0,sizeof(unsigned int)*COR16K);
    for(i=(f_test?sz:0);i<BLOCKSZ;i++) one_block[i]=-1;
    if(f_blocks)

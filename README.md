@@ -11,7 +11,8 @@ with simple public domain decoders written in Assembler and
 **Format SHAFF2 - EXPERIMENTAL SUPPORT**
 
 ~~~~
-SHAFF v1.1 (C) 2013,2017 A.A.Shabarshin <me@shaos.net>
+
+SHAFF v1.2 (C) 2013,2017 A.A.Shabarshin <me@shaos.net>
 
 
 Usage:
@@ -21,7 +22,9 @@ Encoding options:
     -0 to use SHAFF0 file format (by default)
     -1 to use SHAFF1 file format
     -2 to use SHAFF2 file format (experimental)
-    -b to save blocks as separate files
+    -b to compress blocks into separate files
+    -bN to compress only block N
+    -bN-M to compress blocks N..M
     -lN to limit length of matches (default value is 4 for SHAFF0 and 2 for SHAFF1/2)
     -xHH to set prefix byte other than FF (applicable only to SHAFF0 file format)
     -e to set default table for English text (applicable only to SHAFF2 file format)
